@@ -30,7 +30,8 @@ HTML_TEMPLATE = """
     <title>Flask OpenAI Integration</title>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                         Roboto, sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
@@ -115,52 +116,52 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>Flask + OpenAI Integration</h1>
-        
+
         <div class="api-info">
-            <strong>API Status:</strong> 
-            <span id="api-status">{{ 'Connected' if api_key_configured else 'API Key Not Configured' }}</span>
+            <strong>API Status:</strong>
+            <span id="api-status">\n                {{ 'Connected' if api_key_configured \n                   else 'API Key Not Configured' }}\n            </span>
         </div>
-        
+
         <form id="chatForm">
             <div class="form-group">
                 <label for="model">OpenAI Model:</label>
                 <select id="model" name="model">
-                    <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cost-effective)</option>
+                    <option value="gpt-4o-mini">\n                        GPT-4o Mini (Fast & Cost-effective)\n                    </option>
                     <option value="gpt-4o">GPT-4o (Most Capable)</option>
                     <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Legacy)</option>
                 </select>
             </div>
-            
+
             <div class="form-group">
                 <label for="message">Your Message:</label>
-                <textarea id="message" name="message" placeholder="Enter your message here..." required></textarea>
+                <textarea id="message" name="message" \n                          placeholder="Enter your message here..." \n                          required></textarea>
             </div>
-            
+
             <button type="submit">Send Message</button>
         </form>
-        
+
         <div class="loading" id="loading">
             <p>Processing your request...</p>
         </div>
-        
+
         <div id="response"></div>
     </div>
 
     <script>
-        document.getElementById('chatForm').addEventListener('submit', async function(e) {
+        document.getElementById('chatForm').addEventListener(\n            'submit', async function(e) {
             e.preventDefault();
-            
+
             const message = document.getElementById('message').value;
             const model = document.getElementById('model').value;
             const responseDiv = document.getElementById('response');
             const loadingDiv = document.getElementById('loading');
             const submitButton = document.querySelector('button[type="submit"]');
-            
+
             // Show loading state
             loadingDiv.style.display = 'block';
             submitButton.disabled = true;
             responseDiv.innerHTML = '';
-            
+
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
@@ -169,9 +170,9 @@ HTML_TEMPLATE = """
                     },
                     body: JSON.stringify({ message: message, model: model })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     responseDiv.innerHTML = `
                         <div class="response">
@@ -189,7 +190,7 @@ HTML_TEMPLATE = """
             } catch (error) {
                 responseDiv.innerHTML = `
                     <div class="response error">
-                        <strong>Error:</strong> Failed to communicate with the server
+                        <strong>Error:</strong> Failed to communicate \n                        with the server
                     </div>
                 `;
             } finally {
@@ -202,11 +203,18 @@ HTML_TEMPLATE = """
 </html>
 """
 
+
 @app.route('/')
 def index():
     """Main page with chat interface"""
-    api_key_configured = bool(os.getenv('OPENAI_API_KEY') and os.getenv('OPENAI_API_KEY') != 'your_openai_api_key_here')
-    return render_template_string(HTML_TEMPLATE, api_key_configured=api_key_configured)
+    api_key_configured = bool(
+        os.getenv('OPENAI_API_KEY') and
+        os.getenv('OPENAI_API_KEY') != 'your_openai_api_key_here'
+    )
+    return render_template_string(
+        HTML_TEMPLATE, api_key_configured=api_key_configured
+    )
+
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -216,18 +224,19 @@ def chat():
         data = request.get_json()
         message = data.get('message', '').strip()
         model = data.get('model', DEFAULT_MODEL)
-        
+
         if not message:
             return jsonify({'success': False, 'error': 'Message is required'})
-        
+
         # Check if API key is configured
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key or api_key == 'your_openai_api_key_here':
             return jsonify({
-                'success': False, 
-                'error': 'OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file'
+                'success': False,
+                'error': ('OpenAI API key not configured. '
+                          'Please set OPENAI_API_KEY in your .env file')
             })
-        
+
         # Create chat completion
         response = client.chat.completions.create(
             model=model,
@@ -237,10 +246,10 @@ def chat():
             max_tokens=1000,
             temperature=0.7
         )
-        
+
         # Extract response
         ai_response = response.choices[0].message.content
-        
+
         return jsonify({
             'success': True,
             'response': ai_response,
@@ -251,9 +260,10 @@ def chat():
                 'total_tokens': response.usage.total_tokens
             }
         })
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
 
 @app.route('/health')
 def health():
@@ -262,8 +272,12 @@ def health():
         'status': 'healthy',
         'flask_version': '3.1.1',
         'openai_version': '1.99.9',
-        'api_key_configured': bool(os.getenv('OPENAI_API_KEY') and os.getenv('OPENAI_API_KEY') != 'your_openai_api_key_here')
+        'api_key_configured': bool(
+            os.getenv('OPENAI_API_KEY') and
+            os.getenv('OPENAI_API_KEY') != 'your_openai_api_key_here'
+        )
     })
+
 
 @app.route('/models')
 def models():
@@ -271,17 +285,21 @@ def models():
     try:
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key or api_key == 'your_openai_api_key_here':
-            return jsonify({'success': False, 'error': 'API key not configured'})
-        
+            return jsonify({
+                'success': False,
+                'error': 'API key not configured'
+            })
+
         models = client.models.list()
         model_list = [model.id for model in models.data if 'gpt' in model.id]
-        
+
         return jsonify({
             'success': True,
             'models': sorted(model_list)
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
 
 if __name__ == '__main__':
     # Check if API key is configured
@@ -290,6 +308,7 @@ if __name__ == '__main__':
         print("\n⚠️  WARNING: OpenAI API key not configured!")
         print("Please set your API key in the .env file:")
         print("OPENAI_API_KEY=your_actual_api_key_here")
-        print("\nThe app will start but OpenAI features won't work until you configure the API key.\n")
-    
+        print("\nThe app will start but OpenAI features won't work until "
+              "you configure the API key.\n")
+
     app.run(debug=True, host='0.0.0.0', port=5000)
