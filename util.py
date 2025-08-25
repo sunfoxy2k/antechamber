@@ -441,7 +441,7 @@ def validate_requirements_response(
 # ==================== MAIN FUNCTIONS ====================
 
 
-def generate_context(provided_inspiration: str) -> str:
+def generate_context(provided_inspiration: str, available_tools: str = "") -> str:
     """Generate user contexts based on inspiration with interactive feedback."""
 
     system_prompt = """You are a creative context generator that creates diverse user personas and scenarios based on inspiration.
@@ -452,17 +452,19 @@ Your task is to generate a JSON structure with exactly 5 diverse options, each c
 - user_name: the user name should be supper typical with 1 word, that everyone can know it is a fake common name
 - user_role: The role, identity, or life situation of the user
 - user_personality: Key personality traits and characteristics
-- what_they_are_doing_for_current_task: Specific current activity or task they're engaged in
+- what_they_are_doing_for_current_task: Specific current activity or task they're engaged in, dont paraphase the provided inspiration. Should be suitable for the inspiration but not a paraphrased version of the inspiration. It should allow for more than 5 conversation rounds.
+- Do not mention or related to some app specific task. Should be general day to day not task that related specific to some tool.  
 
 IMPORTANT: Generate a MIX of both WORK-RELATED and CASUAL DAY-TO-DAY contexts to show the full range of possibilities.
 
 Requirements:
 1. Generate exactly 5 distinct options
 2. Each option must be significantly different from the others
-3. Include BOTH casual/personal contexts
-4. Vary across different settings, personality types, and task complexity
+3. casual/personal contexts, no work specific contexts
+4. Vary across different settings, personality types
 5. Make each option realistic and relatable
-6. Ensure diversity in life situations
+6. Ensure diversity in life situations, no work specific contexts
+7. The context should be suitable for the following tools: {available_tools} use. The user is using mobile AI that support the tools.
 
 RESPONSE FORMAT - Return ONLY this exact JSON structure with NO additional text:
 {
@@ -476,22 +478,13 @@ RESPONSE FORMAT - Return ONLY this exact JSON structure with NO additional text:
   ]
 }
 
-Create authentic, varied personas spanning:
-
-CASUAL DAY-TO-DAY CONTEXTS:
-- Personal roles: Parent, student, hobbyist, retiree, homeowner, pet owner, etc.
-- Daily activities: Household management, personal projects, hobbies, fitness, learning, etc.
-- Life situations: Moving homes, planning events, organizing spaces, pursuing interests, etc.
-
-PERSONALITY VARIETY:
-- Analytical, creative, detail-oriented, big-picture, social, introverted, practical, dreamer, organized, spontaneous, etc.
 
 REMINDER: Respond with ONLY the JSON object. No explanations, no markdown, no additional text."""
 
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         # Prepare the user message with feedback if available
         if feedback_history:
-            user_message = f"""Create 5 diverse user contexts based on this inspiration: {provided_inspiration}
+            user_message = f"""Create 5 diverse user contexts based on this inspiration: {provided_inspiration} that suitable for the following tools: {available_tools}
 
 Previous feedback from user:
 {chr(10).join(feedback_history)}
@@ -729,194 +722,119 @@ Context: {context if context else "General use"}
     )
 
 
-def populate_content_from_complex_block_improved(
-    complex_block: str, context: Optional[str] = None
+def populate_block(
+    complex_block: str, context: str, system_prompt_must: str
 ) -> str:
     """
-    Generate actual system prompt content from complex block identifiers.
-    Uses both structure.json and complex_block.json for accurate content
-    generation.
-
+    Convert complex block structure into natural English system prompt.
+    
     Args:
-        complex_block: String containing complex block identifiers like
-                      #Block Name#
-        context: Optional context information to tailor the content
-
+        complex_block: String containing complex block identifiers like 
+                      [BLOCK_NAME] and #complex_name#
+        context: String containing user context information
+        system_prompt_must: Required text that must be included word-for-word
+                           in the final system prompt
+    
     Returns:
-        String: The populated system prompt with actual content
+        String: Complete system prompt in natural English
     """
-
-    # Load both structure definitions and complex block definitions
+    
+    # Load definitions and examples
+    build_blocks = load_json_file("./build_block.json")
     complex_blocks = load_json_file("./complex_block.json")
-
-    # Extract context information for tailoring
-    context_info = ""
-    if context:
-        context_info = f"Context: {context}"
-
-    # Create detailed complex block information
-    complex_block_info = ""
+    
+    # Create comprehensive information about blocks
+    block_definitions = ""
+    for block_name, block_data in build_blocks.items():
+        block_definitions += f"\n{block_name.upper()}:\n"
+        block_definitions += f"Purpose: {block_data['what_it_is']}\n"
+        block_definitions += f"Rule: {block_data['rule']}\n"
+        block_definitions += "Examples:\n"
+        for example in block_data['examples']:
+            block_definitions += f"- {example}\n"
+    
+    complex_definitions = ""
     for block_name, block_data in complex_blocks.items():
-        complex_block_info += f"\n- {block_name}:\n"
-        complex_block_info += f"  Definition: {block_data['Definition']}\n"
-        examples_str = '; '.join(block_data['Examples'])
-        complex_block_info += f"  Examples: {examples_str}\n"
-
-    # System prompt for generating actual content
-    system_prompt = f"""You are a system prompt content generator that converts complex block identifiers into actual system prompt content.
+        complex_definitions += f"\n{block_name}:\n"
+        complex_definitions += f"Definition: {block_data['Definition']}\n"
+        complex_definitions += "Examples:\n"
+        for example in block_data['Examples']:
+            complex_definitions += f"- {example}\n"
+    
+    system_prompt = f"""You are a system prompt writer that converts structured block formats into natural, clear English system prompts.
 
 Your task:
-1. Replace each complex block identifier (like #Block Name#) with actual system prompt content
-2. Use the provided definitions and examples from complex_block.json for each block
-3. Use structure.json for additional technical details if needed
-4. Tailor the content to be suitable for the given context
-5. Follow the format: "actual_content [complexity_block]" where complexity_block is the original identifier
-6. Generate natural, coherent system prompt content that flows well
+1. Replace ALL block identifiers with natural English content
+2. Use simple, common words - avoid technical jargon
+3. Make tool instructions very specific, not general
+4. Include the SYSTEM_PROMPT_MUST text word-for-word in the final output
+5. Create a flowing, readable system prompt
 
-Available complex block definitions and examples:
-{complex_block_info}
+CRITICAL REQUIREMENTS:
+- Replace [BLOCK_NAME] with content based on the block's purpose and examples
+- Replace #complex_name# with content based on the complex block's definition
+- Replace [BLOCK_NAME#complex_name] with combined content
+- Use simple language that anyone can understand
+- Make tool instructions specific (say exactly which tools, when to use them)
+- Include this exact text somewhere in the final prompt: "{system_prompt_must}"
 
-{context_info}
+BLOCK DEFINITIONS AND EXAMPLES:
+{block_definitions}
 
-Instructions:
-- Keep the exact same paragraph structure as the input
-- Replace each #identifier# with appropriate content based on its definition followed by [complexity_block]
-- Content should be natural system prompt instructions that implement the definition
-- Use the examples provided to understand how to apply each block correctly
-- Tailor examples and language to the provided context
-- Maintain coherent flow between sentences
-- Each piece of content should be actionable system prompt instructions
+COMPLEX BLOCK DEFINITIONS AND EXAMPLES:
+{complex_definitions}
 
-Process the provided complex block structure now."""
+CONTEXT INFORMATION:
+{context}
 
-    # Create model for content generation
-    content_model = create_model(
-        model_id="gpt-4", temperature=0.7, max_tokens=3000
-    )
+INSTRUCTIONS:
+- Convert the structured format into natural sentences
+- Use the examples to understand what each block should become
+- Be specific about tools and actions, not vague
+- Keep sentences simple and clear
+- Make sure the final prompt flows naturally
+- Include the required text exactly as provided
 
+Process the structured input and create a complete system prompt."""
+
+    model = create_model(model_id="gpt-4", temperature=0.7, max_tokens=3000)
+    
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = f"""
-Please convert each complex block identifier into actual system prompt content while maintaining the exact same structure.
+Convert this structured block format into a natural English system prompt:
 
-Here is the complex block structure to populate:
-
+STRUCTURED INPUT:
 {complex_block}
 
-Remember to:
-- Replace each #identifier# with relevant content based on its definition + [complexity_block]
-- Keep all parenthetical content unchanged
-- Use the definitions and examples from complex_block.json to ensure accuracy
-- Tailor content to the provided context
-- Make content actionable and clear
-- Maintain natural flow
-"""
+CONTEXT:
+{context}
 
-        # Add feedback history if exists
+REQUIRED TEXT (must include word-for-word):
+{system_prompt_must}
+
+Remember to:
+- Replace all [BLOCK_NAME] and #complex_name# with natural English
+- Use simple, common words
+- Be very specific about tool usage
+- Include the required text exactly as written
+- Make it flow naturally as a system prompt
+"""
+        
         if feedback_history:
             user_message += ("\n\nPrevious feedback to incorporate:\n" +
                              "\n".join(feedback_history))
-
+        
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message.strip()}
         ]
-
-        return content_model.generate(messages)
-
+        
+        return model.generate(messages)
+    
     return interactive_feedback_loop(
         generate_content,
         max_iterations=5,
-        task_name="Populating Content From Complex Block"
-    )
-
-
-def populate_content_from_complex_block(
-    complex_block: str, context: Optional[str] = None
-) -> str:
-    """
-    Generate actual system prompt content from complex block identifiers.
-
-    Args:
-        complex_block: String containing complex block identifiers like
-                      [background_information@dynamic_behavior_scaling@
-                       complexity_assessment]
-        context: Optional context information to tailor the content
-
-    Returns:
-        String: The populated system prompt with actual content
-    """
-
-    requirement_structure_explain = load_json_file("./structure.json")[
-        'requirements'
-    ]
-
-    # Extract context information for tailoring
-    context_info = ""
-    if context:
-        context_info = f"Context: {context}"
-
-    # System prompt for generating actual content
-    system_prompt = f"""You are a system prompt content generator that converts complex block identifiers into actual system prompt content.
-
-Your task:
-1. Replace each complex block identifier (like [background_information@dynamic_behavior_scaling@complexity_assessment]) with actual system prompt content
-2. Use the provided explanations and examples from the requirement structure
-3. Tailor the content to be suitable for the given context
-4. Follow the format: "actual_content [complexity_block]" where complexity_block is the original identifier
-5. Generate natural, coherent system prompt content that flows well
-
-Available requirement explanations and examples:
-{json.dumps(requirement_structure_explain, indent=2)}
-
-{context_info}
-
-Instructions:
-- Keep the exact same paragraph structure as the input
-- Replace each [identifier] with appropriate content followed by [complexity_block]
-- Content should be natural system prompt instructions
-- Tailor examples and language to the provided context
-- Maintain coherent flow between sentences
-- Each piece of content should be actionable system prompt instructions
-
-Process the provided complex block structure now."""
-
-    # Create model for content generation
-    content_model = create_model(
-        model_id="gpt-5", temperature=0.7, max_tokens=3000
-    )
-
-    def generate_content(iteration: int, feedback_history: List[str]) -> str:
-        user_message = f"""
-Please convert each complex block identifier into actual system prompt content while maintaining the exact same structure.
-
-Here is the complex block structure to populate:
-
-{complex_block}
-
-Remember to:
-- Replace each [identifier] with relevant content + [complexity_block]
-- Keep all parenthetical content unchanged
-- Tailor content to the context
-- Make content actionable and clear
-- Maintain natural flow
-"""
-
-        # Add feedback history if exists
-        if feedback_history:
-            user_message += ("\n\nPrevious feedback to incorporate:\n" +
-                             "\n".join(feedback_history))
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message.strip()}
-        ]
-
-        return content_model.generate(messages)
-
-    return interactive_feedback_loop(
-        generate_content,
-        max_iterations=5,
-        task_name="Populating Content From Complex Block"
+        task_name="Populating Block Structure"
     )
 
 
