@@ -33,7 +33,7 @@ def load_text_file(file_path: str) -> str:
 
 def play_notification_sound() -> None:
     """
-    Play 3 notification sounds to indicate task completion.
+    Play 3 notification sounds to indicate generation start.
     
     Tries multiple methods in order of preference:
     1. WSL-specific methods (Windows host audio) - 3 beeps
@@ -179,6 +179,8 @@ def interactive_feedback_loop(
 
         # Generate content
         try:
+            # Play notification sound when generation starts
+            play_notification_sound()
             response = generator_func(iteration, feedback_history)
 
             # Validate if validator provided
@@ -220,7 +222,6 @@ def interactive_feedback_loop(
         if feedback.lower() in ['done', 'good', 'good!', 'looks good',
                                 'perfect']:
             print(f"\nGreat! {task_name} completed successfully.")
-            play_notification_sound()
             return response
 
         if feedback.lower() in ['stop', 'quit', 'exit']:
@@ -236,7 +237,6 @@ def interactive_feedback_loop(
 
     print(f"\nReached maximum iterations ({max_iterations}). "
           "Returning final result.")
-    play_notification_sound()
     return response
 
 
@@ -263,12 +263,12 @@ def retry_with_validation(
 
     while retry_count < max_retries:
         try:
+            # Play notification sound when generation starts
+            play_notification_sound()
             response = generator_func()
-            print(response)
             is_valid, errors = validator_func(response)
 
             if is_valid:
-                play_notification_sound()
                 return response
             else:
                 retry_count += 1
