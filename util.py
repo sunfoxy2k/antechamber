@@ -213,6 +213,7 @@ def retry_with_validation(
     while retry_count < max_retries:
         try:
             response = generator_func()
+            print(response)
             is_valid, errors = validator_func(response)
 
             if is_valid:
@@ -361,8 +362,14 @@ def validate_structured_response(
 
 def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
     """
-    Validate the requirements structure response.
-    Checks paragraphs, format, building blocks, and complex block coverage.
+    Validate the requirements structure response according to complex_block_generation.md.
+    
+    Checks for:
+    - Separate format: [BUILDING_BLOCK] (explanation) #Complex Block Name# (explanation)
+    - ALL 7 complex blocks present
+    - At least 3 paragraphs with 2+ different complex blocks
+    - Separate explanations for both building blocks and complex blocks
+    - Proper paragraph count (6-8)
     """
     errors = []
 
@@ -380,11 +387,57 @@ def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
             f"Wrong number of paragraphs: {paragraph_count} (should be 6-8)"
         )
 
-    # Check 2: Should contain building blocks
-    if not re.search(r'\[[A-Z_]+\]', response):
+    # Check 2: Should contain building blocks with proper format
+    building_blocks_found = re.findall(r'\[([A-Z_]+)\]', response)
+    if not building_blocks_found:
         errors.append("Missing building block format [BLOCK_NAME]")
 
-    # Check 3: Complex block coverage - ALL 7 types must be included
+    # Check 3: Validate separate format requirement
+    # Look for pattern: [BUILDING_BLOCK] (explanation) #Complex Block Name# (explanation)
+    separate_format_violations = []
+    
+    # Find all building block and complex block pairs
+    for paragraph in paragraphs:
+        # Find building blocks in this paragraph
+        building_matches = list(re.finditer(r'\[([A-Z_]+)\]', paragraph))
+        complex_matches = list(re.finditer(r'#([^#]+)#', paragraph))
+        
+        # Check if building blocks have explanations
+        for match in building_matches:
+            block_name = match.group(1)
+            start_pos = match.end()
+            
+            # Look for explanation after building block
+            remaining_text = paragraph[start_pos:].strip()
+            if not remaining_text.startswith('(') or ')' not in remaining_text:
+                separate_format_violations.append(
+                    f"Building block [{block_name}] missing separate explanation in parentheses"
+                )
+        
+        # Check if complex blocks have explanations
+        for match in complex_matches:
+            complex_name = match.group(1)
+            start_pos = match.end()
+            
+            # Look for explanation after complex block
+            remaining_text = paragraph[start_pos:].strip()
+            if remaining_text and not remaining_text.startswith('('):
+                # Check if there's an explanation somewhere after this complex block
+                explanation_found = False
+                # Look for parentheses after the complex block
+                paren_match = re.search(r'\([^)]+\)', paragraph[start_pos:])
+                if paren_match:
+                    explanation_found = True
+                
+                if not explanation_found:
+                    separate_format_violations.append(
+                        f"Complex block #{complex_name}# missing separate explanation in parentheses"
+                    )
+
+    if separate_format_violations:
+        errors.extend(separate_format_violations)
+
+    # Check 4: Complex block coverage - ALL 7 types must be included
     missing_complex_blocks = []
     for complex_block_name in required_complex_blocks:
         # Check for #complex_block_name# format (separate format only)
@@ -399,7 +452,7 @@ def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
             f"{', '.join(missing_complex_blocks)}"
         )
 
-    # Check 4: At least 3 paragraphs must have 2 different complex blocks
+    # Check 5: At least 3 paragraphs must have 2 different complex blocks
     paragraphs_with_multiple_blocks = 0
     for paragraph in paragraphs:
         blocks_in_paragraph = set()
@@ -417,6 +470,25 @@ def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
             f"Insufficient paragraph complexity: only "
             f"{paragraphs_with_multiple_blocks} paragraphs have 2+ "
             "complex blocks (need at least 3)"
+        )
+
+    # Check 6: Ensure no merged formats (building blocks and complex blocks should be separate)
+    merged_violations = []
+    
+    for paragraph in paragraphs:
+        # Look for cases where building block and complex block share a single explanation
+        lines = paragraph.split('\n')
+        for line in lines:
+            if re.search(r'\[[A-Z_]+\][^#(]*#[^#]+#[^(]*\([^)]*\)$', line.strip()):
+                # This looks like a merged format - single explanation for both
+                merged_violations.append(
+                    f"Potential merged format detected in line: {line.strip()[:50]}..."
+                )
+    
+    if merged_violations:
+        errors.append(
+            "Format violation: Each building block and complex block must have separate explanations. "
+            f"Detected {len(merged_violations)} potential merged formats."
         )
 
     is_valid = len(errors) == 0
