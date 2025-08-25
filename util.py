@@ -719,56 +719,9 @@ def show_all_complex_blocks():
 # ==================== FORMATTING FUNCTIONS ====================
 
 
-def parse_and_group_components(line: str) -> Dict:
+def format_with_perfect_alignment(text: str, max_width: int = 80) -> str:
     """
-    Parse line and group content with their blocks properly.
-    Returns dict with content_line and block_line.
-    """
-    # Find all components in order
-    pattern = r'(\([^)]*\)|\[[^\]]+\]|#[^#]+#)'
-    matches = re.findall(pattern, line)
-    
-    # Group content and blocks
-    content_parts = []
-    block_parts = []
-    pending_content = []
-    
-    for match in matches:
-        if match.startswith('(') and match.endswith(')'):
-            # This is content
-            content = match[1:-1]  # Remove parentheses
-            pending_content.append(content)
-        elif match.startswith('[') or match.startswith('#'):
-            # This is a block
-            if pending_content:
-                # Group all pending content for this block
-                if len(pending_content) == 1:
-                    content_parts.append(f"({pending_content[0]})")
-                else:
-                    # Multiple content pieces for same block
-                    grouped = " ".join([f"({c})" for c in pending_content])
-                    content_parts.append(grouped)
-                pending_content = []
-            else:
-                # Block without content
-                content_parts.append("()")
-            
-            block_parts.append(match)
-    
-    # Handle any remaining content without blocks
-    if pending_content:
-        for content in pending_content:
-            content_parts.append(f"({content})")
-    
-    return {
-        'content_line': "  ".join(content_parts) if content_parts else "",
-        'block_line': "  ".join(block_parts) if block_parts else ""
-    }
-
-def format_structured_output_final(text: str, max_width: int = 80) -> str:
-    """
-    Format structured output with proper grouping.
-    Content belonging to same block stays together.
+    Perfect alignment with no horizontal restrictions. max_width parameter ignored.
     """
     lines = text.split('\n')
     formatted_lines = []
@@ -778,33 +731,73 @@ def format_structured_output_final(text: str, max_width: int = 80) -> str:
             formatted_lines.append('')
             continue
             
-        # Check if line contains blocks
         if ('[' in line and ']' in line) or ('#' in line and line.count('#') >= 2):
-            # Parse and group the structured line
-            grouped = parse_and_group_components(line)
-            
-            # Add content line
-            if grouped['content_line']:
-                wrapped_content = textwrap.fill(grouped['content_line'], width=max_width,
-                                              break_long_words=False, break_on_hyphens=False)
-                formatted_lines.extend(wrapped_content.split('\n'))
-            
-            # Add block line
-            if grouped['block_line']:
-                wrapped_blocks = textwrap.fill(grouped['block_line'], width=max_width,
-                                             break_long_words=False, break_on_hyphens=False)
-                formatted_lines.extend(wrapped_blocks.split('\n'))
-            
-            formatted_lines.append('')  # Add spacing
-            
+            content_line, block_line = process_structured_line(line)
+            if content_line:
+                formatted_lines.append(content_line)
+            if block_line:
+                formatted_lines.append(block_line)
+            formatted_lines.append('')
         else:
-            # Regular line wrapping
-            wrapped = textwrap.fill(line, width=max_width, 
-                                   break_long_words=False, 
-                                   break_on_hyphens=False)
-            formatted_lines.extend(wrapped.split('\n'))
+            formatted_lines.append(line)
     
     return '\n'.join(formatted_lines)
+
+def process_structured_line(line: str) -> Tuple[str, str]:
+    """
+    Process a single structured line to create aligned content and block lines.
+    """
+    # Parse all components
+    pattern = r'(\([^)]*\)|\[[^\]]+\]|#[^#]+#)'
+    matches = re.findall(pattern, line)
+    
+    # Group content with blocks
+    groups = []
+    current_content = []
+    
+    for match in matches:
+        if match.startswith('('):
+            current_content.append(match)
+        elif match.startswith('[') or match.startswith('#'):
+            if current_content:
+                groups.append((current_content, match))
+                current_content = []
+            else:
+                groups.append((["()"], match))
+    
+    if not groups:
+        return "", ""
+    
+    # Build content line
+    content_parts = []
+    for content_list, block in groups:
+        content_parts.append(" ".join(content_list))
+    
+    content_line = "  ".join(content_parts)
+    
+    # Build block line with exact alignment
+    block_line = ""
+    current_pos = 0
+    
+    for i, (content_list, block) in enumerate(groups):
+        # Calculate where this block should start
+        if i == 0:
+            target_pos = 0
+        else:
+            # Sum up all previous content parts and separators
+            prev_parts = [" ".join(groups[j][0]) for j in range(i)]
+            target_pos = len("  ".join(prev_parts)) + 2  # +2 for next separator
+        
+        # Add spaces to reach target position
+        while current_pos < target_pos:
+            block_line += " "
+            current_pos += 1
+        
+        # Add the block
+        block_line += block
+        current_pos += len(block)
+    
+    return content_line, block_line
 
 def print_formatted_response(response: str, task_name: str = "Response", max_width: int = 80):
     """
@@ -819,7 +812,7 @@ def print_formatted_response(response: str, task_name: str = "Response", max_wid
     print(f"Generated {task_name}:")
     print(f"{'=' * min(60, max_width)}")
     
-    formatted_text = format_structured_output_final(response, max_width)
+    formatted_text = format_with_perfect_alignment(response, max_width)
     print(formatted_text)
     
     print(f"{'=' * min(60, max_width)}")
@@ -852,7 +845,7 @@ def display_for_jupyter(response: str, task_name: str = "Response"):
         from IPython.display import display, HTML
         
         # Format the response
-        formatted_text = format_structured_output_final(response, max_width=100)
+        formatted_text = format_with_perfect_alignment(response, max_width=100)
         
         # Create HTML with better styling
         html_content = f"""
