@@ -4,6 +4,8 @@ from patterns import ModelConfig, OpenAIChat
 from typing import Final, Optional, Dict, List, Tuple, Callable, Any
 import json
 
+import subprocess
+import sys
 import re
 
 # Global model configuration - Single shared client
@@ -29,61 +31,71 @@ def load_text_file(file_path: str) -> str:
         return f.read()
 
 
-def print_formatted_response(response: str, task_name: str, max_width: int = 80) -> None:
+def play_notification_sound() -> None:
     """
-    Print formatted response with proper alignment for block markers.
-
-    Aligns [block] and #block# markers with the first '(' position by counting
-    substring length and adding appropriate spacing.
-
-    Args:
-        response: The content to format and print
-        task_name: Name of the task (for display)
-        max_width: Maximum width for wrapping (default 80)
+    Play a notification sound to indicate task completion.
+    
+    Tries multiple methods in order of preference:
+    1. System bell (cross-platform)
+    2. Linux pactl/pulseaudio beep
+    3. macOS afplay system sound
+    4. Windows system beep
+    5. Fallback to terminal bell character
     """
-    print(f"\n{task_name} Result:")
-    print("-" * len(f"{task_name} Result:"))
+    try:
+        # Method 1: Try system bell using echo
+        if sys.platform.startswith('linux'):
+            # Linux - try multiple approaches
+            try:
+                # Try pactl for PulseAudio systems
+                subprocess.run(['pactl', 'upload-sample', '/usr/share/sounds/alsa/Front_Left.wav', 'bell'],
+                               check=False, capture_output=True, timeout=2)
+                subprocess.run(['pactl', 'play-sample', 'bell'],
+                               check=False, capture_output=True, timeout=2)
+                return
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
 
-    lines = response.split('\n')
+            try:
+                # Try speaker-test for ALSA
+                subprocess.run(['speaker-test', '-t', 'sine', '-f', '1000', '-l', '1'],
+                               check=False, capture_output=True, timeout=3)
+                return
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
 
-    for line in lines:
-        if not line.strip():
-            print()
-            continue
-
-        # Find the first '(' position to determine alignment
-        first_paren_pos = line.find('(')
-
-        if first_paren_pos == -1:
-            # No parentheses found, print as is
-            print(line)
-            continue
-
-        # Look for [block] or #block# patterns
-        block_match = re.search(r'(\[[\w_]+\]|#[\w_]+#)', line)
-
-        if block_match:
-            block_start = block_match.start()
-
-            # Calculate how much space we need to align with first '('
-            # We want the block marker to start at the same position as the first '('
-            spaces_needed = first_paren_pos - block_start
-
-            if spaces_needed > 0:
-                # Insert spaces before the block marker
-                formatted_line = (line[:block_start] +
-                                  ' ' * spaces_needed +
-                                  line[block_start:])
-            else:
-                # Block is already at or past the first '(' position
-                formatted_line = line
-
-            print(formatted_line)
-        else:
-            # No block markers found, print as is
-            print(line)
-
-    print()
+            try:
+                # Try beep command if available
+                subprocess.run(['beep', '-f', '800', '-l', '200'],
+                               check=False, capture_output=True, timeout=2)
+                return
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
+                
+        elif sys.platform == 'darwin':
+            # macOS - use afplay with system sound
+            try:
+                subprocess.run(['afplay', '/System/Library/Sounds/Glass.aiff'],
+                               check=False, capture_output=True, timeout=3)
+                return
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
+                
+        elif sys.platform.startswith('win'):
+            # Windows - use built-in beep
+            try:
+                import winsound
+                winsound.Beep(800, 200)  # 800Hz for 200ms
+                return
+            except ImportError:
+                pass
+        
+        # Fallback: Terminal bell character (works on most terminals)
+        print('\a', end='', flush=True)
+        
+    except Exception:
+        # Ultimate fallback: just print a visual indicator
+        print("🔔 Task completed!")
 
 
 def interactive_feedback_loop(
@@ -135,8 +147,8 @@ def interactive_feedback_loop(
                     continue
                 else:
                     print("✅ Validation passed!")
-
-                    print_formatted_response(response, task_name, max_width=80)
+        
+            print(response)
 
         except Exception as e:
             print(f"Error in {task_name.lower()}: {str(e)}")
@@ -157,6 +169,7 @@ def interactive_feedback_loop(
         if feedback.lower() in ['done', 'good', 'good!', 'looks good',
                                 'perfect']:
             print(f"\nGreat! {task_name} completed successfully.")
+            play_notification_sound()
             return response
 
         if feedback.lower() in ['stop', 'quit', 'exit']:
@@ -172,6 +185,7 @@ def interactive_feedback_loop(
 
     print(f"\nReached maximum iterations ({max_iterations}). "
           "Returning final result.")
+    play_notification_sound()
     return response
 
 
@@ -202,6 +216,7 @@ def retry_with_validation(
             is_valid, errors = validator_func(response)
 
             if is_valid:
+                play_notification_sound()
                 return response
             else:
                 retry_count += 1
