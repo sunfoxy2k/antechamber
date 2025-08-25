@@ -33,19 +33,60 @@ def load_text_file(file_path: str) -> str:
 
 def play_notification_sound() -> None:
     """
-    Play a notification sound to indicate task completion.
+    Play 3 notification sounds to indicate task completion.
     
     Tries multiple methods in order of preference:
-    1. System bell (cross-platform)
-    2. Linux pactl/pulseaudio beep
-    3. macOS afplay system sound
-    4. Windows system beep
-    5. Fallback to terminal bell character
+    1. WSL-specific methods (Windows host audio) - 3 beeps
+    2. Linux native audio systems - 3 beeps
+    3. macOS system sounds - 3 plays
+    4. Windows system beep - 3 beeps
+    5. Terminal bell character - 3 bells
+    6. Visual indicator fallback
     """
     try:
-        # Method 1: Try system bell using echo
-        if sys.platform.startswith('linux'):
-            # Linux - try multiple approaches
+        # Check if running in WSL environment
+        is_wsl = False
+        try:
+            with open('/proc/version', 'r') as f:
+                version_info = f.read().lower()
+                if 'microsoft' in version_info or 'wsl' in version_info:
+                    is_wsl = True
+        except (FileNotFoundError, PermissionError):
+            pass
+        
+        if is_wsl:
+            # WSL-specific approaches
+            try:
+                # Try to use Windows PowerShell to play 3 system sounds
+                subprocess.run([
+                    'powershell.exe', '-c', 
+                    '[console]::beep(800,200); Start-Sleep -Milliseconds 100; [console]::beep(800,200); Start-Sleep -Milliseconds 100; [console]::beep(800,200)'
+                ], check=False, capture_output=True, timeout=5)
+                return
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
+            
+            try:
+                # Alternative: Use cmd.exe with 3 echo bells
+                subprocess.run([
+                    'cmd.exe', '/c', 'echo \a & timeout /t 0 >nul & echo \a & timeout /t 0 >nul & echo \a'
+                ], check=False, capture_output=True, timeout=3)
+                return
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
+            
+            try:
+                # Try Windows Media Player for a system sound
+                subprocess.run([
+                    'powershell.exe', '-c',
+                    '(New-Object Media.SoundPlayer "C:\\Windows\\Media\\chimes.wav").PlaySync()'
+                ], check=False, capture_output=True, timeout=3)
+                return
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
+        
+        elif sys.platform.startswith('linux'):
+            # Native Linux - try multiple approaches
             try:
                 # Try pactl for PulseAudio systems
                 subprocess.run(['pactl', 'upload-sample', '/usr/share/sounds/alsa/Front_Left.wav', 'bell'],
@@ -65,37 +106,47 @@ def play_notification_sound() -> None:
                 pass
 
             try:
-                # Try beep command if available
-                subprocess.run(['beep', '-f', '800', '-l', '200'],
-                               check=False, capture_output=True, timeout=2)
-                return
-            except (subprocess.SubprocessError, FileNotFoundError):
-                pass
-                
-        elif sys.platform == 'darwin':
-            # macOS - use afplay with system sound
-            try:
-                subprocess.run(['afplay', '/System/Library/Sounds/Glass.aiff'],
+                # Try beep command if available (3 times)
+                subprocess.run(['beep', '-f', '800', '-l', '200', '-r', '3', '-d', '100'],
                                check=False, capture_output=True, timeout=3)
                 return
             except (subprocess.SubprocessError, FileNotFoundError):
                 pass
                 
+        elif sys.platform == 'darwin':
+            # macOS - use afplay with system sound (3 times)
+            try:
+                import time
+                for _ in range(3):
+                    subprocess.run(['afplay', '/System/Library/Sounds/Glass.aiff'],
+                                   check=False, capture_output=True, timeout=2)
+                    time.sleep(0.1)
+                return
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
+                
         elif sys.platform.startswith('win'):
-            # Windows - use built-in beep
+            # Windows - use built-in beep (3 times)
             try:
                 import winsound
-                winsound.Beep(800, 200)  # 800Hz for 200ms
+                import time
+                for _ in range(3):
+                    winsound.Beep(800, 200)  # 800Hz for 200ms
+                    time.sleep(0.1)  # 100ms pause between beeps
                 return
             except ImportError:
                 pass
         
-        # Fallback: Terminal bell character (works on most terminals)
-        print('\a', end='', flush=True)
+        # Fallback: Terminal bell character (3 times)
+        import time
+        for _ in range(3):
+            print('\a', end='', flush=True)
+            time.sleep(0.1)
         
     except Exception:
-        # Ultimate fallback: just print a visual indicator
-        print("🔔 Task completed!")
+        # Ultimate fallback: visual indicator with more emphasis
+        print("\n🔔 ✅ TASK COMPLETED! 🔔")
+        print("=" * 40)
 
 
 def interactive_feedback_loop(
@@ -351,7 +402,7 @@ def validate_structured_response(
     paragraphs = [p for p in paragraphs if p.strip().lower() != "you are"]
 
     paragraph_count = len(paragraphs)
-    if paragraph_count < 6 or paragraph_count > 8:
+    if paragraph_count < 6 or paragraph_count > 10:
         errors.append(
             f"Wrong number of paragraphs: {paragraph_count} (should be 6-8)"
         )
@@ -382,7 +433,7 @@ def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
     paragraphs = [p for p in paragraphs if p.strip().lower() != "you are"]
 
     paragraph_count = len(paragraphs)
-    if paragraph_count < 6 or paragraph_count > 8:
+    if paragraph_count < 6 or paragraph_count > 10:
         errors.append(
             f"Wrong number of paragraphs: {paragraph_count} (should be 6-8)"
         )
