@@ -739,32 +739,26 @@ def populate_block(
         String: Complete system prompt in natural English
     """
     
-    # Load definitions and examples
+    # Load definitions only
     build_blocks = load_json_file("./build_block.json")
     complex_blocks = load_json_file("./complex_block.json")
     
-    # Create comprehensive information about blocks
+    # Create definitions information for blocks
     block_definitions = ""
     for block_name, block_data in build_blocks.items():
         block_definitions += f"\n{block_name.upper()}:\n"
         block_definitions += f"Purpose: {block_data['what_it_is']}\n"
         block_definitions += f"Rule: {block_data['rule']}\n"
-        block_definitions += "Examples:\n"
-        for example in block_data['examples']:
-            block_definitions += f"- {example}\n"
     
     complex_definitions = ""
     for block_name, block_data in complex_blocks.items():
         complex_definitions += f"\n{block_name}:\n"
         complex_definitions += f"Definition: {block_data['Definition']}\n"
-        complex_definitions += "Examples:\n"
-        for example in block_data['Examples']:
-            complex_definitions += f"- {example}\n"
     
     system_prompt = f"""You are a system prompt writer that converts structured block formats into natural, clear English system prompts.
 
 Your task:
-1. Replace ALL block identifiers with natural English content
+1. Generate as a list of paragraph.
 2. Use simple, common words - avoid technical jargon
 3. Make tool instructions very specific, not general
 4. Include the SYSTEM_PROMPT_MUST text word-for-word in the final output
@@ -774,30 +768,20 @@ CRITICAL REQUIREMENTS:
 - Replace [BLOCK_NAME] with content based on the block's purpose and examples
 - Replace #complex_name# with content based on the complex block's definition
 - Replace [BLOCK_NAME#complex_name] with combined content
-- Use simple language that anyone can understand
 - Make tool instructions specific (say exactly which tools, when to use them)
 - Include this exact text somewhere in the final prompt: "{system_prompt_must}"
 
-BLOCK DEFINITIONS AND EXAMPLES:
+BLOCK DEFINITIONS:
 {block_definitions}
 
-COMPLEX BLOCK DEFINITIONS AND EXAMPLES:
+COMPLEX BLOCK DEFINITIONS:
 {complex_definitions}
 
-CONTEXT INFORMATION:
-{context}
 
-INSTRUCTIONS:
-- Convert the structured format into natural sentences
-- Use the examples to understand what each block should become
-- Be specific about tools and actions, not vague
-- Keep sentences simple and clear
-- Make sure the final prompt flows naturally
-- Include the required text exactly as provided
 
 Process the structured input and create a complete system prompt."""
 
-    model = create_model(model_id="gpt-4", temperature=0.7, max_tokens=3000)
+    model = create_model(model_id="gpt-5", temperature=0.7, max_tokens=3000)
     
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = f"""
@@ -812,12 +796,7 @@ CONTEXT:
 REQUIRED TEXT (must include word-for-word):
 {system_prompt_must}
 
-Remember to:
-- Replace all [BLOCK_NAME] and #complex_name# with natural English
-- Use simple, common words
-- Be very specific about tool usage
-- Include the required text exactly as written
-- Make it flow naturally as a system prompt
+Focus on populate, address as YOU are for the system prompt, and the user is . Dont mention we, us. Should be objective. 
 """
         
         if feedback_history:
