@@ -78,10 +78,11 @@ def interactive_feedback_loop(
                 else:
                     print("✅ Validation passed!")
 
-            print(f"Generated {task_name}:")
-            print("-" * 40)
-            print(response)
-            print("-" * 40)
+            # Use formatted printing for better display
+            if _use_jupyter_display:
+                display_for_jupyter(response, task_name)
+            else:
+                print_formatted_response(response, task_name, max_width=80)
 
         except Exception as e:
             print(f"Error in {task_name.lower()}: {str(e)}")
@@ -712,3 +713,184 @@ def show_all_complex_blocks():
         print(f"   Definition: {block_data['Definition']}")
         print(f"   Examples: {len(block_data['Examples'])} provided")
         print()
+
+
+# ==================== FORMATTING FUNCTIONS ====================
+
+
+def format_structured_output(text: str, max_width: int = 80) -> str:
+    """
+    Format structured output for better display in Jupyter notebooks.
+    
+    Args:
+        text: The text containing building blocks and complex blocks
+        max_width: Maximum line width for wrapping
+    
+    Returns:
+        Formatted text with proper structure and line wrapping
+    """
+    import textwrap
+    
+    lines = text.split('\n')
+    formatted_lines = []
+    
+    for line in lines:
+        if not line.strip():
+            formatted_lines.append('')
+            continue
+            
+        # Check if line contains both building blocks and complex blocks
+        if '[' in line and ']' in line and '#' in line:
+            # Parse the structured line
+            formatted_line = format_block_line(line, max_width)
+            formatted_lines.extend(formatted_line)
+        else:
+            # Regular line wrapping
+            wrapped = textwrap.fill(line, width=max_width, 
+                                   break_long_words=False, 
+                                   break_on_hyphens=False)
+            formatted_lines.extend(wrapped.split('\n'))
+    
+    return '\n'.join(formatted_lines)
+
+
+def format_block_line(line: str, max_width: int = 80) -> List[str]:
+    """
+    Format a line containing building blocks and complex blocks.
+    Structure: (content) above, [BLOCK_NAME] and #complex_block# below
+    
+    Args:
+        line: Line containing blocks and content
+        max_width: Maximum width for each line
+        
+    Returns:
+        List of formatted lines
+    """
+    import textwrap
+    import re
+    
+    formatted_lines = []
+    
+    # Extract content in parentheses
+    parentheses_content = re.findall(r'\(([^)]+)\)', line)
+    
+    # Extract building blocks
+    building_blocks = re.findall(r'\[([^\]]+)\]', line)
+    
+    # Extract complex blocks  
+    complex_blocks = re.findall(r'#([^#]+)#', line)
+    
+    # Format parentheses content (above)
+    if parentheses_content:
+        for content in parentheses_content:
+            wrapped_content = textwrap.fill(f"({content})", 
+                                          width=max_width,
+                                          break_long_words=False)
+            formatted_lines.extend(wrapped_content.split('\n'))
+    
+    # Format building blocks and complex blocks (below)
+    block_line = ""
+    
+    # Add building blocks
+    for block in building_blocks:
+        if block_line:
+            block_line += " "
+        block_line += f"[{block}]"
+    
+    # Add complex blocks
+    for complex_block in complex_blocks:
+        if block_line:
+            block_line += " "
+        block_line += f"#{complex_block}#"
+    
+    if block_line:
+        wrapped_blocks = textwrap.fill(block_line, 
+                                     width=max_width,
+                                     break_long_words=False)
+        formatted_lines.extend(wrapped_blocks.split('\n'))
+    
+    # Add spacing after each block group
+    formatted_lines.append('')
+    
+    return formatted_lines
+
+
+def print_formatted_response(response: str, task_name: str = "Response", max_width: int = 80):
+    """
+    Print response with proper formatting for Jupyter notebooks.
+    
+    Args:
+        response: The response text to format
+        task_name: Name of the task for the header
+        max_width: Maximum line width
+    """
+    print(f"\n{'=' * min(60, max_width)}")
+    print(f"Generated {task_name}:")
+    print(f"{'=' * min(60, max_width)}")
+    
+    formatted_text = format_structured_output(response, max_width)
+    print(formatted_text)
+    
+    print(f"{'=' * min(60, max_width)}")
+
+
+def test_formatting():
+    """Test the formatting functions with sample structured text."""
+    sample_text = """[CONTEXT_INFORMATION] (provide current location, time, device state, and environment settings) #Provide_Context_Information# (specify current app usage and relevant application context)
+
+[BACKGROUND_INFORMATION] (provide context and background) #Define_Personality_and_Tone# (set consistent character, discourage sycophancy, handle personal questions)
+
+[TONAL_CONTROL] (manage response style) #Guide Tool Use and Response Formatting# (specify tool triggers, control lists vs prose formatting) [USER_PREFERENCES] (user specific preferences)"""
+    
+    print("=== FORMATTING TEST ===")
+    print("\nOriginal text:")
+    print("-" * 40)
+    print(sample_text)
+    
+    print("\nFormatted text:")
+    print("-" * 40)
+    print_formatted_response(sample_text, "Structured Prompt", max_width=80)
+
+
+def display_for_jupyter(response: str, task_name: str = "Response"):
+    """
+    Display formatted response optimized for Jupyter notebooks.
+    Uses HTML formatting for better visual presentation.
+    """
+    try:
+        from IPython.display import display, HTML
+        
+        # Format the response
+        formatted_text = format_structured_output(response, max_width=100)
+        
+        # Create HTML with better styling
+        html_content = f"""
+        <div style="border: 2px solid #4CAF50; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: #f9f9f9;">
+            <h3 style="color: #4CAF50; margin-top: 0;">📝 {task_name}</h3>
+            <pre style="white-space: pre-wrap; font-family: 'Monaco', 'Menlo', 'Consolas', monospace; 
+                        background-color: #ffffff; padding: 10px; border-radius: 5px; 
+                        border-left: 4px solid #4CAF50; overflow-x: auto; max-width: 100%;">
+{formatted_text}
+            </pre>
+        </div>
+        """
+        
+        display(HTML(html_content))
+        
+    except ImportError:
+        # Fallback to regular print if not in Jupyter
+        print_formatted_response(response, task_name, max_width=100)
+
+
+def set_jupyter_display_mode():
+    """
+    Update the interactive_feedback_loop to use Jupyter-optimized display.
+    Call this function when running in Jupyter notebooks.
+    """
+    global _use_jupyter_display
+    _use_jupyter_display = True
+    print("✅ Jupyter display mode enabled - responses will be formatted for notebooks")
+
+
+# Global flag for display mode
+_use_jupyter_display = False
