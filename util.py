@@ -3,7 +3,7 @@ from config import setup_env
 from patterns import ModelConfig, OpenAIChat
 from typing import Final, Optional, Dict, List, Tuple, Callable, Any
 import json
-
+import textwrap
 import subprocess
 import sys
 import re
@@ -29,6 +29,38 @@ def load_text_file(file_path: str) -> str:
     """Load and return text content from file."""
     with open(file_path, "r") as f:
         return f.read()
+
+
+def print_wrapped(text: str, width: int = 150, indent: str = "") -> None:
+    """
+    Print text with automatic line wrapping for long lines.
+    
+    Args:
+        text: Text to print with wrapping
+        width: Maximum line width (default 80)
+        indent: String to indent wrapped lines (default "")
+    """
+    if not isinstance(text, str):
+        print(text)
+        return
+    
+    # Split by existing newlines to preserve intentional line breaks
+    lines = text.split('\n')
+    
+    for line in lines:
+        if len(line) <= width:
+            print(line)
+        else:
+            # Wrap long lines
+            wrapped_lines = textwrap.fill(
+                line, 
+                width=width,
+                initial_indent=indent,
+                subsequent_indent=indent,
+                break_long_words=False,
+                break_on_hyphens=False
+            )
+            print(wrapped_lines)
 
 
 def play_notification_sound() -> None:
@@ -153,7 +185,8 @@ def interactive_feedback_loop(
     generator_func: Callable,
     validator_func: Optional[Callable] = None,
     max_iterations: int = 5,
-    task_name: str = "Processing"
+    task_name: str = "Processing",
+    interactive: bool = False
 ) -> str:
     """
     Generic interactive feedback loop for iterative content generation.
@@ -165,6 +198,8 @@ def interactive_feedback_loop(
                        (is_valid, errors)
         max_iterations: Maximum number of iterations
         task_name: Name of the task for display
+        interactive: If True, ask for user feedback. If False (default), 
+                    run once and return result without user input
 
     Returns:
         Final generated response
@@ -201,7 +236,7 @@ def interactive_feedback_loop(
                 else:
                     print("✅ Validation passed!")
         
-            print(response)
+            print_wrapped(response, width=150)
 
         except Exception as e:
             print(f"Error in {task_name.lower()}: {str(e)}")
@@ -209,7 +244,12 @@ def interactive_feedback_loop(
 
         print(f"\n{'=' * 60}")
 
-        # Get user feedback
+        # If not interactive, return the first successful result
+        if not interactive:
+            print(f"\n{task_name} completed (non-interactive mode).")
+            return response
+
+        # Get user feedback (only in interactive mode)
         feedback = input(
             f"\nProvide feedback for {task_name.lower()} "
             "(or type 'good' to finish, 'stop' to end): "
@@ -549,8 +589,8 @@ def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
 # ==================== MAIN FUNCTIONS ====================
 
 
-def generate_context(provided_inspiration: str, available_tools: str = "", current_system: str = "") -> str:
-    """Generate user contexts based on inspiration with interactive feedback."""
+def generate_context(provided_inspiration: str, available_tools: str = "", current_system: str = "", interactive: bool = False) -> str:
+    """Generate user contexts based on inspiration with optional interactive feedback."""
     
     # Load instruction template from markdown file
     instructions = load_text_file("./instructions/context_generation.md")
@@ -595,17 +635,20 @@ Please incorporate this feedback and generate improved contexts."""
     return interactive_feedback_loop(
         generate_content,
         max_iterations=10,
-        task_name="Context Generation"
+        task_name="Context Generation",
+        interactive=interactive
     )
 
 
-def generate_block(provided_inspiration: str) -> str:
+def generate_block(provided_inspiration: str, interactive: bool = False) -> str:
     """
     Generate a 6-8 paragraph system prompt using building block format
-    with interactive feedback.
+    with optional interactive feedback.
 
     Args:
         provided_inspiration: String containing ideas to incorporate
+        interactive: If True, ask for user feedback. If False (default), 
+                    run once and return result
 
     Returns:
         String: The generated structured system prompt
@@ -654,12 +697,13 @@ Transform these ideas using different wording and distribute them naturally acro
     return interactive_feedback_loop(
         generate_content,
         max_iterations=5,
-        task_name="Structured Prompt Generation"
+        task_name="Structured Prompt Generation",
+        interactive=interactive
     )
 
 
 def generate_complex_block(
-    block_output: str, context: Optional[str] = None
+    block_output: str, context: Optional[str] = None, interactive: bool = False
 ) -> str:
     """
     Add complex block identifiers from complex_block.json to existing
@@ -715,12 +759,13 @@ Context: {context if context else "General use"}
     return interactive_feedback_loop(
         generate_content,
         max_iterations=5,
-        task_name="Adding Complex Blocks"
+        task_name="Adding Complex Blocks",
+        interactive=interactive
     )
 
 
 def populate_block(
-    complex_block: str, context: str, system_prompt_must: str
+    complex_block: str, context: str, system_prompt_must: str, interactive: bool = False
 ) -> str:
     """
     Convert complex block structure into natural English system prompt.
@@ -787,12 +832,13 @@ Focus on populate, address as YOU are for the system prompt, and the user is . D
     return interactive_feedback_loop(
         generate_content,
         max_iterations=5,
-        task_name="Populating Block Structure"
+        task_name="Populating Block Structure",
+        interactive=interactive
     )
 
 
 def add_system_info(
-    complex_structure: str, context: str, system_settings: str
+    complex_structure: str, context: str, system_settings: str, interactive: bool = False
 ) -> str:
     """
     Add 2-5 pieces of system setting information to the FIRST
@@ -848,7 +894,8 @@ Requirements:
     return interactive_feedback_loop(
         generate_content,
         max_iterations=3,
-        task_name="Adding System Info to First Context Information Block"
+        task_name="Adding System Info to First Context Information Block",
+        interactive=interactive
     )
 
 
@@ -889,8 +936,8 @@ def analyze_complex_block_coverage(response: str) -> Tuple[int, int]:
         print(f"\nMissing blocks ({len(missing_blocks)}):")
         for block in missing_blocks:
             print(f"  - {block}")
-            definition = complex_blocks[block]['Definition'][:100]
-            print(f"    Definition: {definition}...")
+            definition = complex_blocks[block]['Definition']
+            print(f"    Definition: {definition}")
 
     return len(found_blocks), len(missing_blocks)
 
