@@ -12,6 +12,7 @@ Generate a JSON structure with exactly 5 diverse options, each containing:
 - **user_role**: The role, identity, or life situation of the user
 - **user_personality**: Key personality traits and characteristics
 - **what_they_are_doing_for_current_task**: Specific current activity or task they're engaged in, don't paraphrase the provided inspiration. Should be suitable for the inspiration but not a paraphrased version of the inspiration. It should allow for more than 5 conversation rounds.
+- **conversation_flow**: A series of 5 short, practical questions that naturally flow from the user's current situation and depend on the list of available tools. Each question should indicate which specific tool would be used to answer it, similar to "What time is it?" (time tool), "What's the distance from here to there?" (maps/location tool), "What transport options do I have?" (transportation tool)
 - Do not mention or relate to some app specific task. Should be general day to day not task that related specific to some tool.
 
 ## Important Guidelines
@@ -24,7 +25,8 @@ Generate a MIX of both WORK-RELATED and CASUAL DAY-TO-DAY contexts to show the f
 4. Vary across different settings, personality types
 5. Make each option realistic and relatable
 6. Ensure diversity in life situations, no work specific contexts
-7. The context should be suitable for the provided tools. The user is using mobile AI that supports the tools.
+7. The context should be suitable for the following tools: {available_tools}. The user is using mobile AI that supports the tools.
+8. Consider the current system context: {current_system}. The generated contexts should be relevant to this system environment.
 
 ## Response Format
 Return ONLY this exact JSON structure with NO additional text:
@@ -36,7 +38,14 @@ Return ONLY this exact JSON structure with NO additional text:
       "user_name": "string",
       "user_role": "string", 
       "user_personality": "string",
-      "what_they_are_doing_for_current_task": "string"
+      "what_they_are_doing_for_current_task": "string",
+      "conversation_flow": [
+        "string",
+        "string", 
+        "string",
+        "string",
+        "string"
+      ]
     }
   ]
 }

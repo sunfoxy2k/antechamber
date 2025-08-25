@@ -5,7 +5,7 @@ from typing import Final, Optional, Dict, List, Tuple, Callable, Any
 import json
 import re
 
-# Global model configuration - Single shared client
+# Global model configuration
 setup_env()
 MODEL_CONFIG: Final = ModelConfig(
     model_id="gpt-5", temperature=0.8, max_tokens=3000
@@ -14,6 +14,16 @@ DEFAULT_MODEL = OpenAIChat(MODEL_CONFIG)
 
 
 # ==================== SUPPORT FUNCTIONS ====================
+
+
+def create_model(
+    model_id: str = "gpt-5", temperature: float = 0.7, max_tokens: int = 2500
+) -> OpenAIChat:
+    """Create an OpenAI model with specified configuration."""
+    config = ModelConfig(
+        model_id=model_id, temperature=temperature, max_tokens=max_tokens
+    )
+    return OpenAIChat(config)
 
 
 def load_json_file(file_path: str) -> Dict[str, Any]:
@@ -223,12 +233,7 @@ def validate_context_json(response_text: str) -> Tuple[
                         f"Context {i + 1} missing required key: {key}"
                     )
 
-                if key == "conversation_flow":
-                    if not isinstance(context[key], list):
-                        return False, None, (
-                            f"Context {i + 1} 'conversation_flow' must be an array"
-                        )
-                elif (not isinstance(context[key], str) or
+                if (not isinstance(context[key], str) or
                         not context[key].strip()):
                     return False, None, (
                         f"Context {i + 1} key '{key}' must be a "
@@ -244,7 +249,7 @@ def validate_context_json(response_text: str) -> Tuple[
 
 
 def validate_structured_response(
-    response: str, provided_inspiration: str
+    response: str, provided_inspiration: str, model: OpenAIChat
 ) -> Tuple[bool, List[str]]:
     """
     Validate the structured response from generate_block function.
@@ -252,6 +257,7 @@ def validate_structured_response(
     Args:
         response: Generated response to validate
         provided_inspiration: Original inspiration text to check against
+        model: OpenAI model for content validation
 
     Returns:
         tuple: (is_valid, list_of_errors)
@@ -285,11 +291,39 @@ def validate_structured_response(
             f"Wrong number of paragraphs: {paragraph_count} (should be 6-8)"
         )
 
+    # Check 3: ChatGPT validation of inspiration content
+    if provided_inspiration and provided_inspiration.strip():
+        validation_prompt = f"""Check if this generated response contains all the key ideas from the provided inspiration.
+
+Generated Response:
+{response}
+
+Original Inspiration:
+{provided_inspiration}
+
+Answer with just "YES" if all inspiration ideas are incorporated (using different wording is fine), or "NO" followed by what's missing."""
+
+        try:
+            validation_messages = [
+                {"role": "user", "content": validation_prompt}
+            ]
+            validation_response = model.generate(validation_messages)
+
+            if not validation_response.strip().upper().startswith("YES"):
+                errors.append(
+                    f"Inspiration content validation failed: "
+                    f"{validation_response}"
+                )
+        except Exception as e:
+            errors.append(f"Could not validate inspiration content: {str(e)}")
+
     is_valid = len(errors) == 0
     return is_valid, errors
 
 
-def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
+def validate_requirements_response(
+    response: str, model: OpenAIChat
+) -> Tuple[bool, List[str]]:
     """
     Validate the requirements structure response.
     Checks paragraphs, format, building blocks, and complex block coverage.
@@ -310,15 +344,37 @@ def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
             f"Wrong number of paragraphs: {paragraph_count} (should be 6-8)"
         )
 
-    # Check 2: Should contain building blocks
-    if not re.search(r'\[[A-Z_]+\]', response):
+    # Check 2: Format validation - should have mixed format
+    # (both #block# and merged [BLOCK#complex])
+    has_separate_format = bool(re.search(r'#[^#]+#', response))
+    has_merged_format = bool(re.search(r'\[[A-Z_]+#[A-Za-z_\s]+\]', response))
+
+    if not has_separate_format and not has_merged_format:
+        errors.append(
+            "Missing both separate #block# and merged [BLOCK#complex] formats"
+        )
+    elif not has_separate_format:
+        errors.append("Missing separate #block# format")
+    elif not has_merged_format:
+        errors.append("Missing merged [BLOCK#complex] format")
+
+    # Check 3: Should still contain building blocks
+    # (either standalone or merged)
+    if (not re.search(r'\[[A-Z_]+\]', response) and
+            not re.search(r'\[[A-Z_]+#', response)):
         errors.append("Missing building block format [BLOCK_NAME]")
 
-    # Check 3: Complex block coverage - ALL 7 types must be included
+    # Check 4: Complex block coverage - Python check for ALL types included
     missing_complex_blocks = []
     for complex_block_name in required_complex_blocks:
-        # Check for #complex_block_name# format (separate format only)
-        if f"#{complex_block_name}#" not in response:
+        short_name = (complex_block_name.replace(" ", "_")
+                      .replace(",", "").replace("-", "_"))
+        found_separate = f"#{complex_block_name}#" in response
+        found_merged = (f"#{complex_block_name}" in response or
+                        f"#{short_name}" in response or
+                        complex_block_name.replace(" ", "_") in response)
+
+        if not found_separate and not found_merged:
             missing_complex_blocks.append(complex_block_name)
 
     # STRICT REQUIREMENT: ALL 7 complex blocks must be included
@@ -329,13 +385,42 @@ def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
             f"{', '.join(missing_complex_blocks)}"
         )
 
-    # Check 4: At least 3 paragraphs must have 2 different complex blocks
+    # Check 5: Verify we have exactly all 7 complex blocks
+    found_complex_blocks = []
+    for complex_block_name in required_complex_blocks:
+        short_name = (complex_block_name.replace(" ", "_")
+                      .replace(",", "").replace("-", "_"))
+        found_separate = f"#{complex_block_name}#" in response
+        found_merged = (f"#{complex_block_name}" in response or
+                        f"#{short_name}" in response or
+                        complex_block_name.replace(" ", "_") in response)
+
+        if found_separate or found_merged:
+            found_complex_blocks.append(complex_block_name)
+
+    if len(found_complex_blocks) != 7:
+        errors.append(
+            f"Incomplete complex block coverage: "
+            f"{len(found_complex_blocks)}/7 complex blocks found "
+            "(ALL 7 REQUIRED)"
+        )
+
+    # Check 6: At least 3 paragraphs must have 2 different complex blocks
     paragraphs_with_multiple_blocks = 0
     for paragraph in paragraphs:
         blocks_in_paragraph = set()
         for complex_block_name in required_complex_blocks:
+            short_name = (complex_block_name.replace(" ", "_")
+                          .replace(",", "").replace("-", "_"))
+
             # Check separate format #block#
             if f"#{complex_block_name}#" in paragraph:
+                blocks_in_paragraph.add(complex_block_name)
+
+            # Check merged format [BLOCK#complex]
+            elif (f"#{complex_block_name}" in paragraph or
+                  f"#{short_name}" in paragraph or
+                  complex_block_name.replace(" ", "_") in paragraph):
                 blocks_in_paragraph.add(complex_block_name)
 
         # Check if this paragraph has 2 or more different complex blocks
@@ -373,7 +458,7 @@ Previous feedback from user:
 
 Please incorporate this feedback and generate improved contexts."""
         else:
-            user_message = f"Create 5 diverse user contexts based on this inspiration: {provided_inspiration}"
+            user_message = "Create 5 diverse user contexts based on this inspiration: "
             
         messages = [
             {"role": "system", "content": system_prompt},
@@ -423,6 +508,11 @@ def generate_block(provided_inspiration: str) -> str:
     build_block = load_text_file("./build_block.json")
     system_prompt = f"{instructions}\n\nReference example: {build_block}"
 
+    # Create model with 2500 token limit
+    structured_model = create_model(
+        model_id="gpt-5", temperature=0.7, max_tokens=2500
+    )
+
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = ""
 
@@ -446,11 +536,11 @@ Transform these ideas using different wording and distribute them naturally acro
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message.strip()}
             ]
-            return DEFAULT_MODEL.generate(messages)
+            return structured_model.generate(messages)
 
         def validator(response):
             return validate_structured_response(
-                response, provided_inspiration
+                response, provided_inspiration, structured_model
             )
 
         return retry_with_validation(
@@ -490,6 +580,10 @@ def generate_complex_block(
     
     system_prompt = f"{instructions}\n\nAvailable complex blocks with definitions and examples (ALL MUST BE USED):{complex_block_info}"
 
+    structured_model = create_model(
+        model_id="gpt-5", temperature=0.7, max_tokens=2500
+    )
+
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = f"""
 Add relevant complex block identifiers to this building block structure:
@@ -509,10 +603,10 @@ Context: {context if context else "General use"}
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message.strip()}
             ]
-            return DEFAULT_MODEL.generate(messages)
+            return structured_model.generate(messages)
 
         def validator(response):
-            return validate_requirements_response(response)
+            return validate_requirements_response(response, structured_model)
 
         return retry_with_validation(
             generator, validator, max_retries=3,
@@ -563,6 +657,8 @@ def populate_block(
     instructions = load_text_file("./instructions/block_population.md")
     
     system_prompt = f"{instructions}\n\nRequired text to include: {system_prompt_must}\n\nBLOCK DEFINITIONS:\n{block_definitions}\n\nCOMPLEX BLOCK DEFINITIONS:\n{complex_definitions}"
+
+    model = create_model(model_id="gpt-5", temperature=0.7, max_tokens=3000)
     
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = f"""
@@ -589,7 +685,7 @@ Focus on populate, address as YOU are for the system prompt, and the user is . D
             {"role": "user", "content": user_message.strip()}
         ]
         
-        return DEFAULT_MODEL.generate(messages)
+        return model.generate(messages)
     
     return interactive_feedback_loop(
         generate_content,
@@ -621,6 +717,8 @@ def add_system_info(
     instructions = load_text_file("./instructions/system_info_enhancement.md")
     system_prompt = instructions
 
+    model = create_model(model_id="gpt-4", temperature=0.7, max_tokens=3000)
+
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = f"""
 Add 2-5 pieces of system setting information to the FIRST CONTEXT_INFORMATION block:
@@ -650,7 +748,7 @@ Requirements:
             {"role": "user", "content": user_message.strip()}
         ]
 
-        return DEFAULT_MODEL.generate(messages)
+        return model.generate(messages)
 
     return interactive_feedback_loop(
         generate_content,
