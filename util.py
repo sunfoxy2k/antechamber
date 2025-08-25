@@ -230,13 +230,13 @@ def validate_context_json(response_text: str) -> Tuple[
             for key in required_keys:
                 if key not in context:
                     return False, None, (
-                        f"Context {i+1} missing required key: {key}"
+                        f"Context { i + 1 } missing required key: {key}"
                     )
 
                 if (not isinstance(context[key], str) or
                         not context[key].strip()):
                     return False, None, (
-                        f"Context {i+1} key '{key}' must be a "
+                        f"Context { i + 1 } key '{key}' must be a "
                         "non-empty string"
                     )
 
@@ -449,6 +449,7 @@ def generate_context(provided_inspiration: str) -> str:
 CRITICAL: You MUST respond with ONLY valid JSON. Do NOT include any explanatory text, markdown formatting, or additional commentary before or after the JSON. Your entire response must be parseable JSON.
 
 Your task is to generate a JSON structure with exactly 5 diverse options, each containing:
+- user_name: the user name should be supper typical with 1 word, that everyone can know it is a fake common name
 - user_role: The role, identity, or life situation of the user
 - user_personality: Key personality traits and characteristics
 - what_they_are_doing_for_current_task: Specific current activity or task they're engaged in
@@ -467,6 +468,7 @@ RESPONSE FORMAT - Return ONLY this exact JSON structure with NO additional text:
 {
   "contexts": [
     {
+      "user_name": "string",
       "user_role": "string",
       "user_personality": "string",
       "what_they_are_doing_for_current_task": "string"
@@ -516,7 +518,6 @@ Please incorporate this feedback and generate improved contexts."""
             )
             if is_valid:
                 print("Generated Context Options:")
-                print(json.dumps(parsed_json, indent=2))
                 return True, []
             else:
                 return False, [error_message]
