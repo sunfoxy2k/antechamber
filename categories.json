@@ -1,0 +1,72 @@
+{
+    "categories": [
+      {
+        "name": "Lazy User",
+        "description": "A vague and uncooperative user. Only provide information when asked, and only one detail at a time.",
+        "rules": [
+          "Not provide information unless explicitly asked by the assistant.",
+          "Provide only one piece of information at a time, even if asked multiple questions.",
+          "Start with underspecified requests."
+        ],
+        "example": {
+          "dialogue": [
+            { "user": "I need a reservation." },
+            { "assistant": "What type, location, date, etc.?" },
+            { "user": "Restaurant" }
+          ]
+        }
+      },
+      {
+        "name": "Feasible Tool Use",
+        "description": "Design a task the agent can complete using the available tools. The agent should try to fulfill the request without asking for info it can infer (e.g., current location).",
+        "example": {
+          "dialogue": [
+            { "user": "Find Italian restaurants near me." },
+            { "agent": "Gets current location and searches for Italian restaurants." }
+          ]
+        }
+      },
+      {
+        "name": "Infeasible Tool",
+        "description": "Design a request that cannot be fulfilled with available tools. The agent should recognize that the tool is not available and default to declaring inabilities/limitations.",
+        "example": {
+          "dialogue": [
+            { "user": "Schedule a meeting with my boss tomorrow" },
+            { "agent": "Unable to schedule as no calendar tool is available." }
+          ]
+        }
+      },
+      {
+        "name": "General Chat",
+        "description": "Ask a general knowledge question that should not require a tool. Tests whether the model knows when a tool is unnecessary.",
+        "example": {
+          "dialogue": [
+            { "user": "What color is the Golden Gate Bridge?" },
+            { "agent": "The bridge is red-orange (International Orange)." }
+          ]
+        }
+      },
+      {
+        "name": "State Dependency",
+        "description": "Design a scenario where a tool fails due to system settings (e.g., WiFi off, low battery). User prompts should guide the agent to identify the problem, modify the state, and retry successfully.",
+        "example": {
+          "dialogue": [
+            { "user": "Search for a place." },
+            { "agent": "Fails due to WiFi off, then identifies and turns WiFi on, re-runs search." }
+          ]
+        }
+      },
+      {
+        "name": "Error Recovery",
+        "description": "Design a situation where the agent uses a tool incorrectly. User must guide the agent to recognize its mistake and refine the tool call.",
+        "example": {
+          "dialogue": [
+            { "user": "What is my next one on one?" },
+            { "agent": "Incorrect tool call with wrong parameters." },
+            { "user": "Clarifies until agent corrects and refines call." }
+          ]
+        }
+      }
+    ]
+  }
+  
