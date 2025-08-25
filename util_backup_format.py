@@ -3,9 +3,7 @@ from config import setup_env
 from patterns import ModelConfig, OpenAIChat
 from typing import Final, Optional, Dict, List, Tuple, Callable, Any
 import json
-import textwrap
 import re
-import textwrap
 
 # Global model configuration - Single shared client
 setup_env()
@@ -720,87 +718,19 @@ def show_all_complex_blocks():
 # ==================== FORMATTING FUNCTIONS ====================
 
 
-import re
-import textwrap
-from typing import List
-
-def format_content_block_pair(content: str, block: str, max_width: int = 80) -> List[str]:
+def format_structured_output(text: str, max_width: int = 80) -> str:
     """
-    Format a content-block pair with content above and block below.
+    Format structured output for better display in Jupyter notebooks.
+    
+    Args:
+        text: The text containing building blocks and complex blocks
+        max_width: Maximum line width for wrapping
+    
+    Returns:
+        Formatted text with proper structure and line wrapping
     """
-    lines = []
+    import textwrap
     
-    # Add content line (or empty parentheses)
-    if content.strip():
-        wrapped_content = textwrap.fill(f"({content})", width=max_width, 
-                                      break_long_words=False, break_on_hyphens=False)
-        lines.extend(wrapped_content.split('\n'))
-    else:
-        lines.append("()")
-    
-    # Add block line
-    wrapped_block = textwrap.fill(block, width=max_width,
-                                break_long_words=False, break_on_hyphens=False)
-    lines.extend(wrapped_block.split('\n'))
-    
-    # Add spacing
-    lines.append('')
-    
-    return lines
-
-def format_block_line_fixed(line: str, max_width: int = 80) -> List[str]:
-    """
-    Format a line with 1:1 mapping between content and blocks.
-    Each (content) gets exactly one [BLOCK] or #complex# below it.
-    If no content, show empty () above the block.
-    """
-    formatted_lines = []
-    
-    # Parse all components in order
-    pattern = r'(\([^)]*\)|\[[^\]]+\]|#[^#]+#)'
-    matches = re.findall(pattern, line)
-    
-    # Group components: content should be followed by block(s)
-    i = 0
-    while i < len(matches):
-        match = matches[i]
-        
-        if match.startswith('(') and match.endswith(')'):
-            # This is content - next item(s) should be block(s)
-            content = match[1:-1]  # Remove parentheses
-            i += 1
-            
-            # Look for the next block (building block or complex block)
-            if i < len(matches):
-                next_match = matches[i]
-                if next_match.startswith('[') or next_match.startswith('#'):
-                    # Found the corresponding block
-                    formatted_lines.extend(format_content_block_pair(content, next_match, max_width))
-                    i += 1
-                else:
-                    # No block found, just add the content
-                    wrapped_content = textwrap.fill(f"({content})", width=max_width)
-                    formatted_lines.extend(wrapped_content.split('\n'))
-                    formatted_lines.append('')
-            else:
-                # No more matches, just add the content
-                wrapped_content = textwrap.fill(f"({content})", width=max_width)
-                formatted_lines.extend(wrapped_content.split('\n'))
-                formatted_lines.append('')
-                
-        elif match.startswith('[') or match.startswith('#'):
-            # This is a block without preceding content - add empty ()
-            formatted_lines.extend(format_content_block_pair("", match, max_width))
-            i += 1
-        else:
-            i += 1
-    
-    return formatted_lines
-
-def format_structured_output_fixed(text: str, max_width: int = 80) -> str:
-    """
-    Format structured output with 1:1 content-to-block mapping.
-    """
     lines = text.split('\n')
     formatted_lines = []
     
@@ -809,10 +739,10 @@ def format_structured_output_fixed(text: str, max_width: int = 80) -> str:
             formatted_lines.append('')
             continue
             
-        # Check if line contains blocks
-        if ('[' in line and ']' in line) or ('#' in line and line.count('#') >= 2):
-            # Parse the structured line with fixed logic
-            formatted_line = format_block_line_fixed(line, max_width)
+        # Check if line contains both building blocks and complex blocks
+        if '[' in line and ']' in line and '#' in line:
+            # Parse the structured line
+            formatted_line = format_block_line(line, max_width)
             formatted_lines.extend(formatted_line)
         else:
             # Regular line wrapping
@@ -822,6 +752,67 @@ def format_structured_output_fixed(text: str, max_width: int = 80) -> str:
             formatted_lines.extend(wrapped.split('\n'))
     
     return '\n'.join(formatted_lines)
+
+
+def format_block_line(line: str, max_width: int = 80) -> List[str]:
+    """
+    Format a line containing building blocks and complex blocks.
+    Structure: (content) above, [BLOCK_NAME] and #complex_block# below
+    
+    Args:
+        line: Line containing blocks and content
+        max_width: Maximum width for each line
+        
+    Returns:
+        List of formatted lines
+    """
+    import textwrap
+    import re
+    
+    formatted_lines = []
+    
+    # Extract content in parentheses
+    parentheses_content = re.findall(r'\(([^)]+)\)', line)
+    
+    # Extract building blocks
+    building_blocks = re.findall(r'\[([^\]]+)\]', line)
+    
+    # Extract complex blocks  
+    complex_blocks = re.findall(r'#([^#]+)#', line)
+    
+    # Format parentheses content (above)
+    if parentheses_content:
+        for content in parentheses_content:
+            wrapped_content = textwrap.fill(f"({content})", 
+                                          width=max_width,
+                                          break_long_words=False)
+            formatted_lines.extend(wrapped_content.split('\n'))
+    
+    # Format building blocks and complex blocks (below)
+    block_line = ""
+    
+    # Add building blocks
+    for block in building_blocks:
+        if block_line:
+            block_line += " "
+        block_line += f"[{block}]"
+    
+    # Add complex blocks
+    for complex_block in complex_blocks:
+        if block_line:
+            block_line += " "
+        block_line += f"#{complex_block}#"
+    
+    if block_line:
+        wrapped_blocks = textwrap.fill(block_line, 
+                                     width=max_width,
+                                     break_long_words=False)
+        formatted_lines.extend(wrapped_blocks.split('\n'))
+    
+    # Add spacing after each block group
+    formatted_lines.append('')
+    
+    return formatted_lines
 
 
 def print_formatted_response(response: str, task_name: str = "Response", max_width: int = 80):
@@ -837,7 +828,7 @@ def print_formatted_response(response: str, task_name: str = "Response", max_wid
     print(f"Generated {task_name}:")
     print(f"{'=' * min(60, max_width)}")
     
-    formatted_text = format_structured_output_fixed(response, max_width)
+    formatted_text = format_structured_output(response, max_width)
     print(formatted_text)
     
     print(f"{'=' * min(60, max_width)}")
@@ -870,7 +861,7 @@ def display_for_jupyter(response: str, task_name: str = "Response"):
         from IPython.display import display, HTML
         
         # Format the response
-        formatted_text = format_structured_output_fixed(response, max_width=100)
+        formatted_text = format_structured_output(response, max_width=100)
         
         # Create HTML with better styling
         html_content = f"""
