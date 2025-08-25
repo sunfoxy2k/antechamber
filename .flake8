@@ -3,3 +3,13 @@
 ignore = E501,W503
 max-line-length = 200
 extend-ignore = E501
+# Exclude directories and files from linting
+exclude = 
+    venv,
+    .venv,
+    env,
+    .env,
+    __pycache__,
+    .git,
+    .pytest_cache,
+    *.egg-info

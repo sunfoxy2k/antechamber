@@ -1,10 +1,25 @@
 [tool.flake8]
 ignore = ["E501"]
 max-line-length = 200
+exclude = ["venv", ".venv", "env", ".env", "__pycache__", ".git", ".pytest_cache", "*.egg-info"]
 
 [tool.ruff]
 line-length = 200
 ignore = ["E501"]
+exclude = ["venv", ".venv", "env", ".env", "__pycache__", ".git", ".pytest_cache", "*.egg-info"]
 
 [tool.black]
 line-length = 200
+exclude = '''
+/(
+    venv
+    | \.venv
+    | env
+    | \.env
+    | __pycache__
+    | \.git
+    | \.pytest_cache
+    | .*\.egg-info
+)/
+'''
+
