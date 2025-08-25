@@ -3,7 +3,7 @@ from config import setup_env
 from patterns import ModelConfig, OpenAIChat
 from typing import Final, Optional, Dict, List, Tuple, Callable, Any
 import json
-import textwrap
+
 import re
 
 # Global model configuration - Single shared client
@@ -27,6 +27,63 @@ def load_text_file(file_path: str) -> str:
     """Load and return text content from file."""
     with open(file_path, "r") as f:
         return f.read()
+
+
+def print_formatted_response(response: str, task_name: str, max_width: int = 80) -> None:
+    """
+    Print formatted response with proper alignment for block markers.
+
+    Aligns [block] and #block# markers with the first '(' position by counting
+    substring length and adding appropriate spacing.
+
+    Args:
+        response: The content to format and print
+        task_name: Name of the task (for display)
+        max_width: Maximum width for wrapping (default 80)
+    """
+    print(f"\n{task_name} Result:")
+    print("-" * len(f"{task_name} Result:"))
+
+    lines = response.split('\n')
+
+    for line in lines:
+        if not line.strip():
+            print()
+            continue
+
+        # Find the first '(' position to determine alignment
+        first_paren_pos = line.find('(')
+
+        if first_paren_pos == -1:
+            # No parentheses found, print as is
+            print(line)
+            continue
+
+        # Look for [block] or #block# patterns
+        block_match = re.search(r'(\[[\w_]+\]|#[\w_]+#)', line)
+
+        if block_match:
+            block_start = block_match.start()
+
+            # Calculate how much space we need to align with first '('
+            # We want the block marker to start at the same position as the first '('
+            spaces_needed = first_paren_pos - block_start
+
+            if spaces_needed > 0:
+                # Insert spaces before the block marker
+                formatted_line = (line[:block_start] +
+                                  ' ' * spaces_needed +
+                                  line[block_start:])
+            else:
+                # Block is already at or past the first '(' position
+                formatted_line = line
+
+            print(formatted_line)
+        else:
+            # No block markers found, print as is
+            print(line)
+
+    print()
 
 
 def interactive_feedback_loop(
@@ -79,11 +136,7 @@ def interactive_feedback_loop(
                 else:
                     print("✅ Validation passed!")
 
-            # Use formatted printing for better display
-            if _use_jupyter_display:
-                display_for_jupyter(response, task_name)
-            else:
-                print_formatted_response(response, task_name, max_width=80)
+                    print_formatted_response(response, task_name, max_width=80)
 
         except Exception as e:
             print(f"Error in {task_name.lower()}: {str(e)}")
@@ -716,165 +769,4 @@ def show_all_complex_blocks():
         print()
 
 
-# ==================== FORMATTING FUNCTIONS ====================
 
-
-def format_with_perfect_alignment(text: str, max_width: int = 80) -> str:
-    """
-    Perfect alignment with no horizontal restrictions. max_width parameter ignored.
-    """
-    lines = text.split('\n')
-    formatted_lines = []
-    
-    for line in lines:
-        if not line.strip():
-            formatted_lines.append('')
-            continue
-            
-        if ('[' in line and ']' in line) or ('#' in line and line.count('#') >= 2):
-            content_line, block_line = process_structured_line(line)
-            if content_line:
-                formatted_lines.append(content_line)
-            if block_line:
-                formatted_lines.append(block_line)
-            formatted_lines.append('')
-        else:
-            formatted_lines.append(line)
-    
-    return '\n'.join(formatted_lines)
-
-def process_structured_line(line: str) -> Tuple[str, str]:
-    """
-    Process a single structured line to create aligned content and block lines.
-    """
-    # Parse all components
-    pattern = r'(\([^)]*\)|\[[^\]]+\]|#[^#]+#)'
-    matches = re.findall(pattern, line)
-    
-    # Group content with blocks
-    groups = []
-    current_content = []
-    
-    for match in matches:
-        if match.startswith('('):
-            current_content.append(match)
-        elif match.startswith('[') or match.startswith('#'):
-            if current_content:
-                groups.append((current_content, match))
-                current_content = []
-            else:
-                groups.append((["()"], match))
-    
-    if not groups:
-        return "", ""
-    
-    # Build content line
-    content_parts = []
-    for content_list, block in groups:
-        content_parts.append(" ".join(content_list))
-    
-    content_line = "  ".join(content_parts)
-    
-    # Build block line with exact alignment
-    block_line = ""
-    current_pos = 0
-    
-    for i, (content_list, block) in enumerate(groups):
-        # Calculate where this block should start
-        if i == 0:
-            target_pos = 0
-        else:
-            # Sum up all previous content parts and separators
-            prev_parts = [" ".join(groups[j][0]) for j in range(i)]
-            target_pos = len("  ".join(prev_parts)) + 2  # +2 for next separator
-        
-        # Add spaces to reach target position
-        while current_pos < target_pos:
-            block_line += " "
-            current_pos += 1
-        
-        # Add the block
-        block_line += block
-        current_pos += len(block)
-    
-    return content_line, block_line
-
-def print_formatted_response(response: str, task_name: str = "Response", max_width: int = 80):
-    """
-    Print response with proper formatting for Jupyter notebooks.
-    
-    Args:
-        response: The response text to format
-        task_name: Name of the task for the header
-        max_width: Maximum line width
-    """
-    print(f"\n{'=' * min(60, max_width)}")
-    print(f"Generated {task_name}:")
-    print(f"{'=' * min(60, max_width)}")
-    
-    formatted_text = format_with_perfect_alignment(response, max_width)
-    print(formatted_text)
-    
-    print(f"{'=' * min(60, max_width)}")
-
-
-def test_formatting():
-    """Test the formatting functions with sample structured text."""
-    sample_text = """[CONTEXT_INFORMATION] (provide current location, time, device state, and environment settings) #Provide_Context_Information# (specify current app usage and relevant application context)
-
-[BACKGROUND_INFORMATION] (provide context and background) #Define_Personality_and_Tone# (set consistent character, discourage sycophancy, handle personal questions)
-
-[TONAL_CONTROL] (manage response style) #Guide Tool Use and Response Formatting# (specify tool triggers, control lists vs prose formatting) [USER_PREFERENCES] (user specific preferences)"""
-    
-    print("=== FORMATTING TEST ===")
-    print("\nOriginal text:")
-    print("-" * 40)
-    print(sample_text)
-    
-    print("\nFormatted text:")
-    print("-" * 40)
-    print_formatted_response(sample_text, "Structured Prompt", max_width=80)
-
-
-def display_for_jupyter(response: str, task_name: str = "Response"):
-    """
-    Display formatted response optimized for Jupyter notebooks.
-    Uses HTML formatting for better visual presentation.
-    """
-    try:
-        from IPython.display import display, HTML
-        
-        # Format the response
-        formatted_text = format_with_perfect_alignment(response, max_width=100)
-        
-        # Create HTML with better styling
-        html_content = f"""
-        <div style="border: 2px solid #4CAF50; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: #f9f9f9;">
-            <h3 style="color: #4CAF50; margin-top: 0;">📝 {task_name}</h3>
-            <pre style="white-space: pre-wrap; font-family: 'Monaco', 'Menlo', 'Consolas', monospace; 
-                        background-color: #ffffff; padding: 10px; border-radius: 5px; 
-                        border-left: 4px solid #4CAF50; overflow-x: auto; max-width: 100%;">
-{formatted_text}
-            </pre>
-        </div>
-        """
-        
-        display(HTML(html_content))
-        
-    except ImportError:
-        # Fallback to regular print if not in Jupyter
-        print_formatted_response(response, task_name, max_width=100)
-
-
-def set_jupyter_display_mode():
-    """
-    Update the interactive_feedback_loop to use Jupyter-optimized display.
-    Call this function when running in Jupyter notebooks.
-    """
-    global _use_jupyter_display
-    _use_jupyter_display = True
-    print("✅ Jupyter display mode enabled - responses will be formatted for notebooks")
-
-
-# Global flag for display mode
-_use_jupyter_display = False
