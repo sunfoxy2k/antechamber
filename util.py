@@ -62,9 +62,9 @@ def interactive_feedback_loop(
     feedback_history = []
 
     while iteration <= max_iterations:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"{task_name.upper()} - Iteration {iteration}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         # Generate content
         try:
@@ -97,7 +97,7 @@ def interactive_feedback_loop(
             print(f"Error in {task_name.lower()}: {str(e)}")
             response = f"Error: {str(e)}"
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
 
         # Get user feedback
         feedback = input(
@@ -225,18 +225,18 @@ def validate_context_json(response_text: str) -> Tuple[
         ]
         for i, context in enumerate(parsed["contexts"]):
             if not isinstance(context, dict):
-                return False, None, f"Context {i+1} is not an object"
+                return False, None, f"Context {i + 1} is not an object"
 
             for key in required_keys:
                 if key not in context:
                     return False, None, (
-                        f"Context { i + 1 } missing required key: {key}"
+                        f"Context {i + 1} missing required key: {key}"
                     )
 
                 if (not isinstance(context[key], str) or
                         not context[key].strip()):
                     return False, None, (
-                        f"Context { i + 1 } key '{key}' must be a "
+                        f"Context {i + 1} key '{key}' must be a "
                         "non-empty string"
                     )
 
@@ -443,43 +443,10 @@ def validate_requirements_response(
 
 def generate_context(provided_inspiration: str, available_tools: str = "") -> str:
     """Generate user contexts based on inspiration with interactive feedback."""
-
-    system_prompt = """You are a creative context generator that creates diverse user personas and scenarios based on inspiration.
-
-CRITICAL: You MUST respond with ONLY valid JSON. Do NOT include any explanatory text, markdown formatting, or additional commentary before or after the JSON. Your entire response must be parseable JSON.
-
-Your task is to generate a JSON structure with exactly 5 diverse options, each containing:
-- user_name: the user name should be supper typical with 1 word, that everyone can know it is a fake common name
-- user_role: The role, identity, or life situation of the user
-- user_personality: Key personality traits and characteristics
-- what_they_are_doing_for_current_task: Specific current activity or task they're engaged in, dont paraphase the provided inspiration. Should be suitable for the inspiration but not a paraphrased version of the inspiration. It should allow for more than 5 conversation rounds.
-- Do not mention or related to some app specific task. Should be general day to day not task that related specific to some tool.  
-
-IMPORTANT: Generate a MIX of both WORK-RELATED and CASUAL DAY-TO-DAY contexts to show the full range of possibilities.
-
-Requirements:
-1. Generate exactly 5 distinct options
-2. Each option must be significantly different from the others
-3. casual/personal contexts, no work specific contexts
-4. Vary across different settings, personality types
-5. Make each option realistic and relatable
-6. Ensure diversity in life situations, no work specific contexts
-7. The context should be suitable for the following tools: {available_tools} use. The user is using mobile AI that support the tools.
-
-RESPONSE FORMAT - Return ONLY this exact JSON structure with NO additional text:
-{
-  "contexts": [
-    {
-      "user_name": "string",
-      "user_role": "string",
-      "user_personality": "string",
-      "what_they_are_doing_for_current_task": "string"
-    }
-  ]
-}
-
-
-REMINDER: Respond with ONLY the JSON object. No explanations, no markdown, no additional text."""
+    
+    # Load instruction template from markdown file
+    instructions = load_text_file("./instructions/context_generation.md")
+    system_prompt = instructions.replace("{available_tools}", available_tools)
 
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         # Prepare the user message with feedback if available
@@ -538,41 +505,11 @@ def generate_block(provided_inspiration: str) -> str:
     Returns:
         String: The generated structured system prompt
     """
-
+    
+    # Load instruction template and example from files
+    instructions = load_text_file("./instructions/block_generation.md")
     build_block = load_text_file("./build_block.json")
-
-    # Base system prompt for generating structured prompts
-    system_prompt = f"""You are a system prompt generator that creates structured prompts using building block format.
-
-Create 6 to 8 paragraphs using building block format.
-
-Format Structure:
-Each paragraph should follow patterns like:
-- [block name] [block name] (content that paraphrases ideas) [block name]
-- [block name] (content with paraphrased ideas) [block name] [block name]
-- (content incorporating paraphrased ideas) [block name] [block name] [block name]
-- [block name] [block name] [block name]
-- [block name] [block name]
-
-The order of block names is completely flexible - you can place them at the beginning, middle, end, or mixed throughout each paragraph as makes sense for natural flow.
-
-Requirements:
-1. ONLY SHOW AS BLOCK NAME and (paraphrased ideas) in the paragraph, do not have any other text in the paragraph.
-2. Create 6 to 8 paragraphs (choose the number that works best for the content)
-3. Each paragraph uses 2-3 building block references. At least 1 paragraph only has [block name] [block name].
-4. Adapt everything to be suitable for the given context
-5. This is to generate a system prompt, so structure it appropriately
-6. Use ONLY these specific building block names:
-   - [CONTEXT_INFORMATION]
-   - [TOOL_USE_INSTRUCTIONS]
-   - [USER_PREFERENCES]
-   - [BACKGROUND_INFORMATION]
-   - [TONAL_CONTROL]
-7. Reference this as example {build_block}
-8. (text inside round brackets) is paraphrased from inspiration ideas only and should be a full paraphase, and can easily identify as a paraphrased version of the inspiration ideas. Should have 1 to 1 map between paraphase and inspiration ideas.
-9. THERE MUST BE AT LEAST 2 PARAGRAPHS that is [block name] [block name] [block name] only without paraphrased ideas.
-
-Generate the system prompt using the flexible building block format"""
+    system_prompt = f"{instructions}\n\nReference example: {build_block}"
 
     # Create model with 2500 token limit
     structured_model = create_model(
@@ -632,9 +569,10 @@ def generate_complex_block(
     implementation.
     """
 
-    # Load complex blocks from JSON with definitions and examples
+    # Load instruction template and complex block data
+    instructions = load_text_file("./instructions/complex_block_generation.md")
     complex_blocks = load_json_file("./complex_block.json")
-
+    
     # Create detailed information about each complex block
     complex_block_info = ""
     for block_name, block_data in complex_blocks.items():
@@ -642,45 +580,8 @@ def generate_complex_block(
         complex_block_info += f"  Definition: {block_data['Definition']}\n"
         examples_str = '; '.join(block_data['Examples'])
         complex_block_info += f"  Examples: {examples_str}\n"
-
-    system_prompt = f"""You are a system prompt processor that adds complex block identifiers to building block structures using MIXED FORMAT.
-
-Your task:
-1. Keep the existing paragraph structure EXACTLY as is
-2. Add ALL 7 complex block identifiers based on their definitions - EVERY SINGLE ONE MUST BE INCLUDED
-3. Use MIXED FORMAT: 30-40% merged format, 60-70% separate format
-4. Use the provided definitions and examples to ensure correct application
-
-MIXED FORMAT REQUIREMENTS:
-- MERGED FORMAT (30-40% of building blocks): [BUILDING_BLOCK#Complex_Block_Name]
-- SEPARATE FORMAT (60-70% of building blocks): [BUILDING_BLOCK] #Complex Block Name# (explanation)
-
-CRITICAL REQUIREMENT: ALL 7 complex blocks must be included in the output. No exceptions.
-
-Available complex blocks with definitions and examples (ALL MUST BE USED):
-{complex_block_info}
-
-Instructions:
-- Keep EXACT same paragraph structure and content
-- Use MIXED FORMAT: Some blocks merged [BLOCK#complex], others separate [BLOCK] #complex#
-- Aim for 30-40% of building blocks to use merged format [BUILDING_BLOCK#Complex_Name]
-- Remaining 60-70% use separate format [BUILDING_BLOCK] #Complex Name# (brief explanation)
-- MANDATORY: Include ALL 7 complex blocks - distribute them across the paragraphs appropriately
-- MANDATORY: At least 3 paragraphs must have 2 different complex blocks
-- Maintain all original content including (parenthetical content)
-
-EXAMPLES:
-- Merged: [BACKGROUND_INFORMATION#Define_Personality_and_Tone] (explanation)
-- Separate: [TONAL_CONTROL] #Guide Tool Use and Response Formatting# (control formatting)
-- Mixed paragraph: [CONTEXT_INFORMATION#Provide_Context_Information] [USER_PREFERENCES] #Set Clear Guardrails# (safety)
-
-VALIDATION: The output will be checked to ensure:
-- ALL 7 complex blocks are present
-- At least 3 paragraphs have 2 different complex blocks
-- Mixed format used (30-40% merged, 60-70% separate)
-Missing any requirement will cause validation failure.
-
-Process the building block structure now and ensure ALL 7 complex blocks are included with proper mixed format distribution."""
+    
+    system_prompt = f"{instructions}\n\nAvailable complex blocks with definitions and examples (ALL MUST BE USED):{complex_block_info}"
 
     structured_model = create_model(
         model_id="gpt-5", temperature=0.7, max_tokens=2500
@@ -755,31 +656,10 @@ def populate_block(
         complex_definitions += f"\n{block_name}:\n"
         complex_definitions += f"Definition: {block_data['Definition']}\n"
     
-    system_prompt = f"""You are a system prompt writer that converts structured block formats into natural, clear English system prompts.
-
-Your task:
-1. Generate as a list of paragraph.
-2. Use simple, common words - avoid technical jargon
-3. Make tool instructions very specific, not general
-4. Include the SYSTEM_PROMPT_MUST text word-for-word in the final output
-5. Create a flowing, readable system prompt
-
-CRITICAL REQUIREMENTS:
-- Replace [BLOCK_NAME] with content based on the block's purpose and examples
-- Replace #complex_name# with content based on the complex block's definition
-- Replace [BLOCK_NAME#complex_name] with combined content
-- Make tool instructions specific (say exactly which tools, when to use them)
-- Include this exact text somewhere in the final prompt: "{system_prompt_must}"
-
-BLOCK DEFINITIONS:
-{block_definitions}
-
-COMPLEX BLOCK DEFINITIONS:
-{complex_definitions}
-
-
-
-Process the structured input and create a complete system prompt."""
+    # Load instruction template
+    instructions = load_text_file("./instructions/block_population.md")
+    
+    system_prompt = f"{instructions}\n\nRequired text to include: {system_prompt_must}\n\nBLOCK DEFINITIONS:\n{block_definitions}\n\nCOMPLEX BLOCK DEFINITIONS:\n{complex_definitions}"
 
     model = create_model(model_id="gpt-5", temperature=0.7, max_tokens=3000)
     
@@ -836,31 +716,9 @@ def add_system_info(
                CONTEXT_INFORMATION block
     """
 
-    system_prompt = """You are a system prompt enhancer that adds system setting information to the FIRST CONTEXT_INFORMATION block.
-
-Your task:
-1. Analyze the provided context and system settings to understand the user's environment
-2. Generate 2-5 pieces of relevant system setting information
-3. Add this information ONLY to the FIRST CONTEXT_INFORMATION block you find in the structure
-4. Leave all other blocks completely unchanged
-
-Requirements:
-- Add 2-5 pieces of system setting information to the FIRST CONTEXT_INFORMATION block only
-- Generate system info dynamically based on context and settings
-- Maintain the exact structure and format of the input
-- Make additions feel natural and integrated
-- Do NOT modify any other blocks
-
-Instructions:
-- Find the FIRST CONTEXT_INFORMATION block in the structure
-- Add 2-5 pieces of relevant system setting information to that block only
-- Generate system info that would be helpful for the specific context and settings
-- Format: Add as natural extensions within the first CONTEXT_INFORMATION block
-- Example: "[CONTEXT_INFORMATION] existing content (system: mobile device, storage: 64GB, network: WiFi)"
-
-CRITICAL: Enhance ONLY the FIRST CONTEXT_INFORMATION block. Leave all others unchanged.
-
-Focus on adding system setting information that's specifically relevant to the context."""
+    # Load instruction template
+    instructions = load_text_file("./instructions/system_info_enhancement.md")
+    system_prompt = instructions
 
     model = create_model(model_id="gpt-4", temperature=0.7, max_tokens=3000)
 
@@ -932,7 +790,7 @@ def analyze_complex_block_coverage(response: str) -> Tuple[int, int]:
     print()
     print(f"Coverage Summary: {len(found_blocks)}/{len(all_complex_blocks)} "
           "complex blocks included")
-    coverage_pct = (len(found_blocks)/len(all_complex_blocks))*100
+    coverage_pct = (len(found_blocks) / len(all_complex_blocks)) * 100
     print(f"Coverage Percentage: {coverage_pct:.1f}%")
 
     if missing_blocks:
