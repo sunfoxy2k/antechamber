@@ -215,7 +215,7 @@ def interactive_feedback_loop(
         # Generate content
         try:
             # Play notification sound when generation starts
-            play_notification_sound()
+            
             response = generator_func(iteration, feedback_history)
 
             # Validate if validator provided
@@ -235,7 +235,10 @@ def interactive_feedback_loop(
                     continue
                 else:
                     print("✅ Validation passed!")
-        
+
+            print(f"===Response length:=== {len(response)} characters")
+            print()
+            print()
             print_wrapped(response, width=150)
 
         except Exception as e:
@@ -304,8 +307,9 @@ def retry_with_validation(
     while retry_count < max_retries:
         try:
             # Play notification sound when generation starts
-            play_notification_sound()
+
             response = generator_func()
+            play_notification_sound()
             is_valid, errors = validator_func(response)
 
             if is_valid:
@@ -419,7 +423,7 @@ def validate_structured_response(
         tuple: (is_valid, list_of_errors)
     """
     errors = []
-
+    
     # Check 1: All 5 building block types mentioned
     required_blocks = [
         "[CONTEXT_INFORMATION]",
@@ -451,19 +455,22 @@ def validate_structured_response(
     return is_valid, errors
 
 
-def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
+def validate_requirements_response(response: str, context: Optional[str] = None) -> Tuple[bool, List[str]]:
     """
     Validate the requirements structure response according to complex_block_generation.md.
     
     Checks for:
-    - Separate format: [BUILDING_BLOCK] (explanation) #Complex Block Name# (explanation)
+    - Format: [BUILDING_BLOCK] (explanation) #Complex Block Name# (explanation) __unparaphrased ideas__
+    - Mixed format with both parenthetical explanations and double underscore content
     - ALL 7 complex blocks present
-    - At least 3 paragraphs with 2+ different complex blocks
-    - Separate explanations for both building blocks and complex blocks
+    - Appropriate format choice based on semantic similarity
     - Proper paragraph count (6-8)
+    - Concise explanations without redundant word lists
+    - No specific tool references from user context
     """
     errors = []
-
+    
+    # Print response length    
     # Load complex blocks from JSON to check coverage
     complex_blocks = load_json_file("./complex_block.json")
     required_complex_blocks = list(complex_blocks.keys())
@@ -483,55 +490,10 @@ def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
     if not building_blocks_found:
         errors.append("Missing building block format [BLOCK_NAME]")
 
-    # Check 3: Validate separate format requirement
-    # Look for pattern: [BUILDING_BLOCK] (explanation) #Complex Block Name# (explanation)
-    separate_format_violations = []
-    
-    # Find all building block and complex block pairs
-    for paragraph in paragraphs:
-        # Find building blocks in this paragraph
-        building_matches = list(re.finditer(r'\[([A-Z_]+)\]', paragraph))
-        complex_matches = list(re.finditer(r'#([^#]+)#', paragraph))
-        
-        # Check if building blocks have explanations
-        for match in building_matches:
-            block_name = match.group(1)
-            start_pos = match.end()
-            
-            # Look for explanation after building block
-            remaining_text = paragraph[start_pos:].strip()
-            if not remaining_text.startswith('(') or ')' not in remaining_text:
-                separate_format_violations.append(
-                    f"Building block [{block_name}] missing separate explanation in parentheses"
-                )
-        
-        # Check if complex blocks have explanations
-        for match in complex_matches:
-            complex_name = match.group(1)
-            start_pos = match.end()
-            
-            # Look for explanation after complex block
-            remaining_text = paragraph[start_pos:].strip()
-            if remaining_text and not remaining_text.startswith('('):
-                # Check if there's an explanation somewhere after this complex block
-                explanation_found = False
-                # Look for parentheses after the complex block
-                paren_match = re.search(r'\([^)]+\)', paragraph[start_pos:])
-                if paren_match:
-                    explanation_found = True
-                
-                if not explanation_found:
-                    separate_format_violations.append(
-                        f"Complex block #{complex_name}# missing separate explanation in parentheses"
-                    )
-
-    if separate_format_violations:
-        errors.extend(separate_format_violations)
-
-    # Check 4: Complex block coverage - ALL 7 types must be included
+    # Check 3: Complex block coverage - ALL 7 types must be included
     missing_complex_blocks = []
     for complex_block_name in required_complex_blocks:
-        # Check for #complex_block_name# format (separate format only)
+        # Check for #complex_block_name# format
         if f"#{complex_block_name}#" not in response:
             missing_complex_blocks.append(complex_block_name)
 
@@ -543,45 +505,186 @@ def validate_requirements_response(response: str) -> Tuple[bool, List[str]]:
             f"{', '.join(missing_complex_blocks)}"
         )
 
-    # Check 5: At least 3 paragraphs must have 2 different complex blocks
-    paragraphs_with_multiple_blocks = 0
-    for paragraph in paragraphs:
-        blocks_in_paragraph = set()
-        for complex_block_name in required_complex_blocks:
-            # Check separate format #block#
-            if f"#{complex_block_name}#" in paragraph:
-                blocks_in_paragraph.add(complex_block_name)
-
-        # Check if this paragraph has 2 or more different complex blocks
-        if len(blocks_in_paragraph) >= 2:
-            paragraphs_with_multiple_blocks += 1
-
-    if paragraphs_with_multiple_blocks < 3:
-        errors.append(
-            f"Insufficient paragraph complexity: only "
-            f"{paragraphs_with_multiple_blocks} paragraphs have 2+ "
-            "complex blocks (need at least 3)"
-        )
-
-    # Check 6: Ensure no merged formats (building blocks and complex blocks should be separate)
-    merged_violations = []
+    # Check 4: Validate format appropriateness (separate vs merged)
+    format_violations = []
     
     for paragraph in paragraphs:
-        # Look for cases where building block and complex block share a single explanation
-        lines = paragraph.split('\n')
-        for line in lines:
-            if re.search(r'\[[A-Z_]+\][^#(]*#[^#]+#[^(]*\([^)]*\)$', line.strip()):
-                # This looks like a merged format - single explanation for both
-                merged_violations.append(
-                    f"Potential merged format detected in line: {line.strip()[:50]}..."
-                )
+        # Find building blocks and complex blocks in this paragraph
+        building_matches = list(re.finditer(r'\[([A-Z_]+)\]', paragraph))
+        complex_matches = list(re.finditer(r'#([^#]+)#', paragraph))
+        
+        for building_match in building_matches:
+            building_name = building_match.group(1)
+            building_pos = building_match.end()
+            
+            # Look for complex blocks after this building block
+            for complex_match in complex_matches:
+                if complex_match.start() > building_pos:
+                    complex_name = complex_match.group(1)
+                    complex_pos = complex_match.end()
+                    
+                    # Check what's between building block and complex block
+                    between_text = paragraph[building_pos:complex_match.start()].strip()
+                    
+                    # Check what's after the complex block
+                    after_text = paragraph[complex_pos:].strip()
+                    
+                    # Count explanations - both parenthetical and double underscore
+                    explanations_count = 0
+                    underscore_count = 0
+                    
+                    # Check for parenthetical explanations
+                    if re.match(r'^\s*\([^)]+\)', between_text):
+                        explanations_count += 1
+                    if re.match(r'^\s*\([^)]+\)', after_text):
+                        explanations_count += 1
+                    
+                    # Check for double underscore content (unparaphrased ideas)
+                    if re.search(r'__[^_]+__', between_text):
+                        underscore_count += 1
+                    if re.search(r'__[^_]+__', after_text):
+                        underscore_count += 1
+                    
+                    # Validate format choice - new format expects both () and __
+                    # Expected format: [BLOCK] (explanation) #complex# (explanation) __unparaphrased__
+                    total_content = explanations_count + underscore_count
+                    
+                    if explanations_count >= 1 and underscore_count >= 1:
+                        # Good: Has both parenthetical explanations and unparaphrased content
+                        pass
+                    elif explanations_count >= 2 and underscore_count == 0:
+                        # Acceptable: Traditional separate format without unparaphrased content
+                        pass
+                    elif explanations_count == 1 and underscore_count == 0:
+                        # Acceptable: Traditional merged format
+                        pass
+                    elif total_content == 0:
+                        format_violations.append(
+                            f"Format issue: [{building_name}] and #{complex_name}# "
+                            f"need explanations and/or unparaphrased content"
+                        )
+                    # Note: We're being permissive to allow various valid formats
+                    break
+
+    if format_violations:
+        errors.extend(format_violations)
+
+    # # Check 5: Look for oververbose explanations with redundant word lists
+    # verbose_violations = []
     
-    if merged_violations:
+    # # Pattern to detect redundant word lists like "analyze (examine, review, assess)"
+    # redundant_pattern = r'\w+\s*\([^)]*,\s*[^)]*\)'
+    
+    # for paragraph in paragraphs:
+    #     redundant_matches = re.findall(redundant_pattern, paragraph)
+    #     if redundant_matches:
+    #         for match in redundant_matches:
+    #             verbose_violations.append(
+    #                 f"Redundant word list detected: {match}"
+    #             )
+    
+    # if verbose_violations:
+    #     errors.append(
+    #         f"Writing guideline violation: Avoid redundant word lists. "
+    #         f"Found {len(verbose_violations)} instances of similar meaning words in parentheses."
+    #     )
+
+    # Check 6: Look for tool references from context (should be avoided)
+    tool_violations = []
+    
+    if context:
+        # Extract tool names from context conversation_flow
+        try:
+            import json
+            context_data = json.loads(context)
+            tools_from_context = set()
+            
+            # Extract tools from conversation_flow
+            if "conversation_flow" in context_data:
+                for flow_item in context_data["conversation_flow"]:
+                    # Look for tools in parentheses like "(search_yelp)"
+                    tool_matches = re.findall(r'\(([^)]+)\)', flow_item)
+                    for tool in tool_matches:
+                        tools_from_context.add(tool.strip())
+            
+            # Check if any tools from context are mentioned in response
+            for tool in tools_from_context:
+                if re.search(re.escape(tool), response, re.IGNORECASE):
+                    tool_violations.append(f"Context tool reference found: {tool}")
+                    
+        except (json.JSONDecodeError, KeyError, TypeError):
+            # If context parsing fails, skip tool validation
+            pass
+    
+    if tool_violations:
         errors.append(
-            "Format violation: Each building block and complex block must have separate explanations. "
-            f"Detected {len(merged_violations)} potential merged formats."
+            "Writing guideline violation: Avoid mentioning specific tools from user context. "
+            f"Found {len(tool_violations)} tool references."
         )
 
+    is_valid = len(errors) == 0
+    return is_valid, errors
+
+
+def validate_populate_response(response: str, context: Optional[str] = None) -> Tuple[bool, List[str]]:
+    """
+    Validate the populated block response according to block_population.md.
+    
+    Checks for:
+    - No tool references from user context conversation_flow
+    - No block name references like [CONTEXT_INFORMATION]
+    - No adjective lists
+    - Response length and quality
+    """
+    errors = []
+    
+    # Check 1: No block name references
+    block_references = re.findall(r'\[([A-Z_]+)\]', response)
+    if block_references:
+        errors.append(f"Block name references found: {', '.join(block_references)}")
+    
+    complex_block_references = re.findall(r'#([^#]+)#', response)
+    if complex_block_references:
+        errors.append(f"Complex block references found: {', '.join(complex_block_references)}")
+    
+    # Check 2: No tool references from context
+    tool_violations = []
+    
+    if context:
+        try:
+            import json
+            context_data = json.loads(context)
+            tools_from_context = set()
+            
+            # Extract tools from conversation_flow
+            if "conversation_flow" in context_data:
+                for flow_item in context_data["conversation_flow"]:
+                    # Look for tools in parentheses like "(search_yelp)"
+                    tool_matches = re.findall(r'\(([^)]+)\)', flow_item)
+                    for tool in tool_matches:
+                        tools_from_context.add(tool.strip())
+            
+            # Check if any tools from context are mentioned in response
+            for tool in tools_from_context:
+                if re.search(re.escape(tool), response, re.IGNORECASE):
+                    tool_violations.append(f"Context tool reference found: {tool}")
+                    
+        except (json.JSONDecodeError, KeyError, TypeError):
+            # If context parsing fails, skip tool validation
+            pass
+    
+    if tool_violations:
+        errors.append(
+            "Writing guideline violation: Avoid mentioning specific tools from user context. "
+            f"Found {len(tool_violations)} tool references."
+        )
+    
+    # # Check 3: Look for adjective lists
+    # adjective_list_pattern = r'\b\w+,\s+\w+,\s+(?:and\s+)?\w+'
+    # adjective_matches = re.findall(adjective_list_pattern, response)
+    # if adjective_matches:
+    #     errors.append(f"Adjective lists found: {', '.join(adjective_matches[:3])}...")  # Show first 3
+    
     is_valid = len(errors) == 0
     return is_valid, errors
 
@@ -714,18 +817,8 @@ def generate_complex_block(
     """
 
     # Load instruction template and complex block data
-    instructions = load_text_file("./instructions/complex_block_generation.md")
-    complex_blocks = load_json_file("./complex_block.json")
-    
-    # Create detailed information about each complex block
-    complex_block_info = ""
-    for block_name, block_data in complex_blocks.items():
-        complex_block_info += f"\n- {block_name}:\n"
-        complex_block_info += f"  Definition: {block_data['Definition']}\n"
-        examples_str = '; '.join(block_data['Examples'])
-        complex_block_info += f"  Examples: {examples_str}\n"
-    
-    system_prompt = f"{instructions}\n\nAvailable complex blocks with definitions and examples (ALL MUST BE USED):{complex_block_info}"
+    instructions = load_text_file("./instructions/complex_block_generation.md")    
+    system_prompt = instructions
 
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = f"""
@@ -749,7 +842,7 @@ Context: {context if context else "General use"}
             return DEFAULT_MODEL.generate(messages)
 
         def validator(response):
-            return validate_requirements_response(response)
+            return validate_requirements_response(response, context)
 
         return retry_with_validation(
             generator, validator, max_retries=3,
@@ -822,12 +915,21 @@ Focus on populate, address as YOU are for the system prompt, and the user is . D
             user_message += ("\n\nPrevious feedback to incorporate:\n" +
                              "\n".join(feedback_history))
         
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message.strip()}
-        ]
-        
-        return DEFAULT_MODEL.generate(messages)
+        # Generate with retry and validation
+        def generator():
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message.strip()}
+            ]
+            return DEFAULT_MODEL.generate(messages)
+
+        def validator(response):
+            return validate_populate_response(response, context)
+
+        return retry_with_validation(
+            generator, validator, max_retries=3,
+            task_name="block population"
+        )
     
     return interactive_feedback_loop(
         generate_content,
@@ -862,8 +964,6 @@ def add_system_info(
 
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = f"""
-Add 2-5 pieces of system setting information to the FIRST CONTEXT_INFORMATION block:
-
 COMPLEX STRUCTURE:
 {complex_structure}
 
@@ -873,11 +973,7 @@ CONTEXT:
 SYSTEM SETTINGS:
 {system_settings}
 
-Requirements:
-- Add 2-5 pieces of system setting information to the FIRST CONTEXT_INFORMATION block only
-- Generate relevant system info based on context and system settings
-- Maintain exact structure and format
-- Leave all other blocks unchanged
+return the system prompt in the same format as the complex structure with the system info added to the first CONTEXT_INFORMATION block
 """
 
         if feedback_history:

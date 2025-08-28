@@ -6,90 +6,70 @@ You are a system prompt processor that adds complex block identifiers to buildin
 ## Task
 1. Keep the existing paragraph structure EXACTLY as is
 2. Add ALL 7 complex block identifiers based on their definitions
-3. Use SEPARATE FORMAT ONLY: [BUILDING_BLOCK] #Complex Block Name#
+3. Use SEPARATE FORMAT or MERGED FORMAT when blocks have similar meanings
 4. Use the provided definitions and examples to ensure correct application
 
 ## Format Requirements
-- **Format**: [BUILDING_BLOCK] (building block explanation) #Complex Block Name# (complex block explanation)
-- Each building block gets its own explanation
-- Each complex block gets its own separate explanation
-- No merged formats allowed
+- **Separate Format**: [BUILDING_BLOCK] (building block explanation) #Complex Block Name# (complex block explanation)
+- **Merged Format**: [BUILDING_BLOCK] #Complex Block Name# (combined explanation covering both block types)
+- Use merged format when building block and complex block have overlapping or similar meanings
+- Use separate format when building block and complex block serve distinct purposes
+- Each format gets appropriate explanation(s)
 
 ## Requirements
 - Maintain all original content including (parenthetical content)
 - Include ALL 7 complex blocks - distribute across paragraphs appropriately
-- At least 3 paragraphs must have 2 different complex blocks
-- Provide separate explanations for building blocks and complex blocks
+- Choose appropriate format (separate or merged) based on semantic similarity
+- Provide explanations that cover both block types (separate or combined as appropriate)
+- **No tool references**: DO NOT mention or quote specific tools from user context conversation_flow (tools appear in parentheses like "(search_yelp)", "(business_popular_dishes)") MUST NOT MENTION TOOLS FROM CONTEXT
+
+## Writing Guidelines
+- **Be concise and on-point**: Avoid oververbose explanations
+- **No redundant word lists**: Don't include similar meaning words in parentheses (e.g., avoid "analyze (examine, review, assess)")
+- **Context-relevant**: Explanations should relate to the user's provided context
+- **No tool references**: Never mention or quote specific tools from user context conversation_flow (tools appear in parentheses like "(search_yelp)", "(business_popular_dishes)")
 
 ## Examples
-- [BACKGROUND_INFORMATION] (provide context and background) #Define_Personality_and_Tone# (set consistent character, discourage sycophancy, handle personal questions)
-- [TONAL_CONTROL] (manage response style) #Guide Tool Use and Response Formatting# (specify tool triggers, control lists vs prose formatting)
-- [CONTEXT_INFORMATION] (provide current location, time, device state, and environment settings) #Provide_Context_Information# (specify current app usage and relevant application context)
+
+### Separate Format (different purposes)
+- [BACKGROUND_INFORMATION] (provide relevant context) #Define_Personality_and_Tone# (maintain consistent communication style)
+- [TONAL_CONTROL] (manage response approach) #Guide Tool Use and Response Formatting# (specify when to research versus provide direct answers)
+
+### Merged Format (similar meanings)
+- [CONTEXT_INFORMATION] #Provide_Context_Information# (establish current environment and application state for relevant responses)
 
 ## Available Complex Blocks
 
 ### 1. Provide Context Information about Applications and Entities
 **Definition**: Help the model understand what applications the user is currently using and what information is relevant to the applications in-use.
 
-**Examples**:
-- "Provide context on current app-use"
-- "Example: The user is currently listening to music on their Spotify app / the user is currently shopping for products on Amazon."
-- "Example applications (this list is not exhaustive!): Spotify, Amazon, Yelp, Stock Apps, Reddit, Calendar Apps, News Apps, etc."
-
 ### 2. Define Personality and Tone
 **Definition**: Control the model's character to ensure a consistent and appropriate user experience.
 
-**Examples**:
-- "Discourage Sycophancy: Explicitly forbid praising the user's questions to maintain a direct and helpful demeanor."
-- "Example: Never start a response with flattery like 'That's an excellent question!'. Skip the praise and answer the query directly."
-- "Handle Personal Questions: Instruct the model to answer questions about its 'preferences' or 'experiences' hypothetically without explicitly stating that it is doing so."
-- "Example: If asked about your personal preferences, respond as if it were a hypothetical question. Do not state that you are responding hypothetically."
 
 ### 3. Inject Critical, Non-Negotiable Facts
 **Definition**: For information the model must treat as absolute truth (like the outcome of an event or company facts) and instruct the model on its usage.
 
-**Examples**:
-- "Create Factual Blocks"
-- "Example: The current CEO of Stellar AI is Maria Rodriguez, appointed in 2024. Do not mention this unless directly asked about company leadership."
 
 ### 4. Guide Tool Use and Response Formatting
 **Definition**: Provide clear instructions on when to use tools (like web search) and how to format responses for different contexts.
 
-**Examples**:
-- "Define Tool Triggers: Specify keywords or query types that should activate tools to ensure they are used efficiently and appropriately."
-- "Example: Use the 'web_search' tool for topics beyond your knowledge cutoff or for queries containing terms like 'research,' 'analyze,' or 'deep dive.' A 'deep dive' query requires at least 5 tool calls for thoroughness."
-- "Control Formatting: Dictate the appropriate use of lists, bolding, and prose to match the conversational context."
-- "Example: Avoid using bullet points in casual conversation; write in natural prose instead. For technical reports or step-by-step instructions, you may use numbered lists."
 
 ### 5. Set Clear Guardrails and Safety Protocols
 **Definition**: Explicitly define refusal and safety boundaries. Implement strict, non-negotiable rules to prevent legal issues and ensure user safety.
 
-**Examples**:
-- "The model must recognize when to refuse, how to do so succinctly, and when user intent crosses red lines."
-- "Example: If a request involves harm, illegal activity, or manipulation, respond with a brief refusal and do not speculate or redirect."
-- "Implement Copyright Restrictions: To avoid legal issues, set strict rules on using external content found via tools."
-- "Example: Strictly respect copyright. Never reproduce more than a short quote (under 15 words) from a source. Always use quotation marks and provide a citation. If asked about 'fair use,' state you are not a lawyer and cannot offer a legal opinion."
 
 ### 6. Implement Dynamic Behavior Scaling
 **Definition**: Instead of having a single static behavior, instruct the model to adapt its approach based on the perceived complexity of the user's request. This allows for more efficient handling of simple queries while ensuring thorough research for complex ones.
 
-**Examples**:
-- "Define Tiered Response Protocols: Create different tiers of action based on keywords or an analysis of the user's prompt."
-- "Tier 1 (Simple Query): If the user asks a simple factual question, answer directly. Use 0-1 tool calls."
-- "Tier 2 (Comparative Query): If the user asks to 'compare' products or find 'reviews,' you must use at least 3 tool calls to gather multiple perspectives."
-- "Tier 3 (Deep Dive): If the user uses terms like 'analyze,' 'research,' 'evaluate,' or 'make a report,' you must perform a minimum of 5 tool calls to ensure a comprehensive and well-supported response. You must then synthesize the findings from all sources in your answer."
 
 ### 7. Instruct Critical Evaluation of User Input
 **Definition**: Prevent the model from blindly accepting user statements or corrections. A sophisticated agent should be instructed to verify user input, especially when it contradicts its own knowledge, seems implausible, or relates to a safety-critical domain.
 
-**Examples**:
-- "Mandate a Verification Step: Instruct the model that if a user corrects it or provides a piece of information, it should not immediately agree."
-- "It should first perform a self-consistency check or use a tool to verify the user's claim before acknowledging the correction or incorporating the new information."
-- "If a user corrects you or tells you you've made a mistake, do not immediately apologize or accept the correction, as the user may be mistaken."
-- "First, perform an internal 'thinking' step to re-evaluate your previous statement against the user's claim. If uncertain, use a tool like 'web_search' to verify the user's information. Only after you have confirmed the user is correct should you acknowledge the mistake and provide the corrected answer."
-
 ## Validation
 Missing any requirement will cause validation failure. Output checked for:
 - ALL 7 complex blocks present
-- At least 3 paragraphs with 2+ different complex blocks
-- Separate explanations for both building blocks and complex blocks
+- Appropriate format choice (separate for different purposes, merged for similar meanings)
+- Complete explanations covering both block types (separate or combined as chosen)
+- Concise, on-point explanations without redundant word lists
+- No specific tool mention from user context conversation_flow (tools in parentheses)

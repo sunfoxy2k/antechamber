@@ -1,13 +1,19 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Protocol, Callable
 from openai import OpenAI
 from config import setup_env
 
+
 @dataclass(frozen=True)
 class ModelConfig:
-    model_id: str = "gpt-5"
+    model_id: str = "gpt-4o"
     temperature: float = 0.2
     max_tokens: int = 1000
+    reasoning: dict = field(default_factory=lambda: {"effort": "low"})
+    text: dict = field(default_factory=lambda: {
+        "verbosity": "low",
+    })
+
 
 GLOBAL_MODEL = ModelConfig()
 
@@ -26,6 +32,8 @@ class OpenAIChat(ChatModel):
         )
         if "temperature" in kwargs: params["temperature"] = kwargs["temperature"]
         if "max_tokens"  in kwargs: params["max_tokens"]  = kwargs["max_tokens"]
+        if "reasoning" in kwargs: params["reasoning"] = kwargs["reasoning"]
+        if "text" in kwargs: params["text"] = kwargs["text"]
 
         resp = self.client.chat.completions.create(**params)
         return resp.choices[0].message.content
