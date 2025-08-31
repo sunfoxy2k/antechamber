@@ -186,6 +186,7 @@ def _create_feedback_widget(task_name: str):
     try:
         import ipywidgets as widgets
         from IPython.display import display, clear_output
+        import threading
         
         # Create input components
         feedback_area = widgets.Textarea(
@@ -218,7 +219,9 @@ def _create_feedback_widget(task_name: str):
         )
         
         output_area = widgets.Output()
-        result = {}
+        
+        # Use a thread-safe result container
+        result = {'action': None, 'feedback': None, 'completed': threading.Event()}
         
         def disable_buttons():
             """Disable all buttons to prevent multiple clicks."""
@@ -245,6 +248,7 @@ def _create_feedback_widget(task_name: str):
                     print("✅ No feedback provided. Using current result.")
             
             status_area.value = "<p style='color: #28a745; font-weight: bold;'>✅ Feedback submitted! Processing...</p>"
+            result['completed'].set()  # Signal completion
         
         def on_good_click(b):
             # Immediate visual feedback
@@ -259,6 +263,8 @@ def _create_feedback_widget(task_name: str):
                 clear_output()
                 print("✅ Great! Task completed successfully.")
                 print("🎉 No further iterations needed.")
+            
+            result['completed'].set()  # Signal completion
         
         def on_stop_click(b):
             # Immediate visual feedback
@@ -273,6 +279,8 @@ def _create_feedback_widget(task_name: str):
                 clear_output()
                 print("⏹️ Task stopped by user.")
                 print("📋 Using current result.")
+            
+            result['completed'].set()  # Signal completion
         
         submit_button.on_click(on_submit_click)
         good_button.on_click(on_good_click)
@@ -373,28 +381,44 @@ def interactive_feedback_loop(
         if result is not None:
             # Use Jupyter widgets interface
             print("Please provide feedback using the interface above...")
+            print("(Click one of the buttons to proceed)")
             
-            # Wait for user interaction
-            import time
-            while 'action' not in result:
-                time.sleep(0.1)  # Small delay to prevent busy waiting
-            
-            feedback = result.get('feedback', '')
-            action = result.get('action', 'continue')
-            
-            if action == 'done':
-                print(f"\nGreat! {task_name} completed successfully.")
-                return response
-            elif action == 'stop':
-                print(f"\nStopping {task_name.lower()}.")
-                return response
-            elif action == 'continue':
-                if feedback:
-                    feedback_history.append(f"Iteration {iteration}: {feedback}")
-                    print(f"Generating new {task_name.lower()} based on feedback...")
+            try:
+                # Wait for user interaction using threading event
+                print("⏳ Waiting for your input...")
+                
+                # Wait for the completion event with a timeout
+                timeout = 300  # 5 minutes timeout
+                if result['completed'].wait(timeout=timeout):
+                    # User clicked a button
+                    feedback = result.get('feedback', '')
+                    action = result.get('action', 'continue')
+                    
+                    if action == 'done':
+                        print(f"\n✅ Great! {task_name} completed successfully.")
+                        return response
+                    elif action == 'stop':
+                        print(f"\n⏹️ Stopping {task_name.lower()}.")
+                        return response
+                    elif action == 'continue':
+                        if feedback:
+                            feedback_history.append(f"Iteration {iteration}: {feedback}")
+                            print(f"🔄 Generating new {task_name.lower()} based on feedback...")
+                        else:
+                            print(f"✅ No feedback provided. {task_name} complete.")
+                            return response
                 else:
-                    print(f"No feedback provided. {task_name} complete.")
-                    return response
+                    # Timeout occurred
+                    print("⚠️ Timeout waiting for response. Falling back to text input.")
+                    # Fall through to text input
+                        
+            except KeyboardInterrupt:
+                print("\n⚠️ Interrupted by user. Falling back to text input...")
+                # Fall through to regular input method
+            except Exception as e:
+                print(f"⚠️ Widget interaction error: {e}")
+                print("Falling back to text input...")
+                # Fall through to regular input method
         else:
             # Fallback to regular input
             feedback = input(
