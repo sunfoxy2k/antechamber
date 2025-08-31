@@ -189,7 +189,7 @@ def _create_feedback_widget(task_name: str):
         
         # Create input components
         feedback_area = widgets.Textarea(
-            placeholder=f"Provide feedback for {task_name.lower()} (or type 'good' to finish, 'stop' to end)",
+            placeholder=f"Provide feedback for {task_name.lower()} (or use buttons below)",
             layout=widgets.Layout(width="100%", height="120px")
         )
         
@@ -211,34 +211,68 @@ def _create_feedback_widget(task_name: str):
             layout=widgets.Layout(width="150px")
         )
         
+        # Status indicator
+        status_area = widgets.HTML(
+            value="<p style='color: #666; font-style: italic;'>Waiting for your input...</p>",
+            layout=widgets.Layout(margin="10px 0px")
+        )
+        
         output_area = widgets.Output()
         result = {}
         
+        def disable_buttons():
+            """Disable all buttons to prevent multiple clicks."""
+            submit_button.disabled = True
+            good_button.disabled = True
+            stop_button.disabled = True
+        
         def on_submit_click(b):
+            # Immediate visual feedback
+            disable_buttons()
+            submit_button.description = "Processing..."
+            status_area.value = "<p style='color: #007bff; font-weight: bold;'>🔄 Processing your feedback...</p>"
+            
             feedback = feedback_area.value.strip()
             result['feedback'] = feedback
             result['action'] = 'continue'
+            
             with output_area:
                 clear_output()
                 if feedback:
                     print(f"✅ Feedback recorded: {feedback}")
-                    print("Generating improved version...")
+                    print("🔄 Generating improved version...")
                 else:
                     print("✅ No feedback provided. Using current result.")
+            
+            status_area.value = "<p style='color: #28a745; font-weight: bold;'>✅ Feedback submitted! Processing...</p>"
         
         def on_good_click(b):
+            # Immediate visual feedback
+            disable_buttons()
+            good_button.description = "Finishing..."
+            status_area.value = "<p style='color: #28a745; font-weight: bold;'>✅ Task completed successfully!</p>"
+            
             result['feedback'] = ""
             result['action'] = 'done'
+            
             with output_area:
                 clear_output()
                 print("✅ Great! Task completed successfully.")
+                print("🎉 No further iterations needed.")
         
         def on_stop_click(b):
+            # Immediate visual feedback
+            disable_buttons()
+            stop_button.description = "Stopping..."
+            status_area.value = "<p style='color: #ffc107; font-weight: bold;'>⏹️ Stopping task...</p>"
+            
             result['feedback'] = ""
             result['action'] = 'stop'
+            
             with output_area:
                 clear_output()
-                print("⏹️ Stopping task.")
+                print("⏹️ Task stopped by user.")
+                print("📋 Using current result.")
         
         submit_button.on_click(on_submit_click)
         good_button.on_click(on_good_click)
@@ -248,6 +282,7 @@ def _create_feedback_widget(task_name: str):
         button_box = widgets.HBox([submit_button, good_button, stop_button])
         widget_box = widgets.VBox([
             widgets.HTML(f"<h4>💬 Feedback for {task_name}</h4>"),
+            status_area,
             feedback_area,
             button_box,
             output_area
