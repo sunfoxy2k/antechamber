@@ -181,6 +181,86 @@ def play_notification_sound() -> None:
         print("=" * 40)
 
 
+def _create_feedback_widget(task_name: str):
+    """Create a feedback input widget for interactive mode."""
+    try:
+        import ipywidgets as widgets
+        from IPython.display import display, clear_output
+        
+        # Create input components
+        feedback_area = widgets.Textarea(
+            placeholder=f"Provide feedback for {task_name.lower()} (or type 'good' to finish, 'stop' to end)",
+            layout=widgets.Layout(width="100%", height="120px")
+        )
+        
+        submit_button = widgets.Button(
+            description="Submit Feedback",
+            button_style='primary',
+            layout=widgets.Layout(width="150px")
+        )
+        
+        good_button = widgets.Button(
+            description="Looks Good!",
+            button_style='success',
+            layout=widgets.Layout(width="150px")
+        )
+        
+        stop_button = widgets.Button(
+            description="Stop Here",
+            button_style='warning',
+            layout=widgets.Layout(width="150px")
+        )
+        
+        output_area = widgets.Output()
+        result = {}
+        
+        def on_submit_click(b):
+            feedback = feedback_area.value.strip()
+            result['feedback'] = feedback
+            result['action'] = 'continue'
+            with output_area:
+                clear_output()
+                if feedback:
+                    print(f"✅ Feedback recorded: {feedback}")
+                    print("Generating improved version...")
+                else:
+                    print("✅ No feedback provided. Using current result.")
+        
+        def on_good_click(b):
+            result['feedback'] = ""
+            result['action'] = 'done'
+            with output_area:
+                clear_output()
+                print("✅ Great! Task completed successfully.")
+        
+        def on_stop_click(b):
+            result['feedback'] = ""
+            result['action'] = 'stop'
+            with output_area:
+                clear_output()
+                print("⏹️ Stopping task.")
+        
+        submit_button.on_click(on_submit_click)
+        good_button.on_click(on_good_click)
+        stop_button.on_click(on_stop_click)
+        
+        # Layout the interface
+        button_box = widgets.HBox([submit_button, good_button, stop_button])
+        widget_box = widgets.VBox([
+            widgets.HTML(f"<h4>💬 Feedback for {task_name}</h4>"),
+            feedback_area,
+            button_box,
+            output_area
+        ])
+        
+        display(widget_box)
+        return result
+        
+    except ImportError:
+        # Fallback to regular input if widgets not available
+        return None
+
+
 def interactive_feedback_loop(
     generator_func: Callable,
     validator_func: Optional[Callable] = None,
@@ -252,29 +332,58 @@ def interactive_feedback_loop(
             print(f"\n{task_name} completed (non-interactive mode).")
             return response
 
-        # Get user feedback (only in interactive mode)
-        feedback = input(
-            f"\nProvide feedback for {task_name.lower()} "
-            "(or type 'good' to finish, 'stop' to end): "
-        ).strip()
+        # Get user feedback using widgets if available, otherwise fallback to input
+        result = _create_feedback_widget(task_name)
+        
+        if result is not None:
+            # Use Jupyter widgets interface
+            print("Please provide feedback using the interface above...")
+            
+            # Wait for user interaction
+            import time
+            while 'action' not in result:
+                time.sleep(0.1)  # Small delay to prevent busy waiting
+            
+            feedback = result.get('feedback', '')
+            action = result.get('action', 'continue')
+            
+            if action == 'done':
+                print(f"\nGreat! {task_name} completed successfully.")
+                return response
+            elif action == 'stop':
+                print(f"\nStopping {task_name.lower()}.")
+                return response
+            elif action == 'continue':
+                if feedback:
+                    feedback_history.append(f"Iteration {iteration}: {feedback}")
+                    print(f"Generating new {task_name.lower()} based on feedback...")
+                else:
+                    print(f"No feedback provided. {task_name} complete.")
+                    return response
+        else:
+            # Fallback to regular input
+            feedback = input(
+                f"\nProvide feedback for {task_name.lower()} "
+                "(or type 'good' to finish, 'stop' to end): "
+            ).strip()
 
-        if feedback == "":
-            print(f"No feedback provided. {task_name} complete.")
-            return response
+            if feedback == "":
+                print(f"No feedback provided. {task_name} complete.")
+                return response
 
-        if feedback.lower() in ['done', 'good', 'good!', 'looks good',
-                                'perfect']:
-            print(f"\nGreat! {task_name} completed successfully.")
-            return response
+            if feedback.lower() in ['done', 'good', 'good!', 'looks good',
+                                    'perfect']:
+                print(f"\nGreat! {task_name} completed successfully.")
+                return response
 
-        if feedback.lower() in ['stop', 'quit', 'exit']:
-            print(f"\nStopping {task_name.lower()}.")
-            return response
+            if feedback.lower() in ['stop', 'quit', 'exit']:
+                print(f"\nStopping {task_name.lower()}.")
+                return response
 
-        if feedback:
-            feedback_history.append(f"Iteration {iteration}: {feedback}")
-            print(f"Feedback recorded: {feedback}")
-            print(f"Generating new {task_name.lower()} based on feedback...")
+            if feedback:
+                feedback_history.append(f"Iteration {iteration}: {feedback}")
+                print(f"Feedback recorded: {feedback}")
+                print(f"Generating new {task_name.lower()} based on feedback...")
 
         iteration += 1
 
@@ -767,11 +876,14 @@ def generate_block(provided_inspiration: str, interactive: bool = False) -> str:
 
         if provided_inspiration:
             user_message += f"""
+Transform these ideas using different wording and distribute them naturally across the paragraphs. They can appear at any position within each paragraph.
 
 Inspiration ideas to incorporate throughout the paragraphs is in bullet points.
+INSPIRATION: 
+
 {provided_inspiration}
 
-Transform these ideas using different wording and distribute them naturally across the paragraphs. They can appear at any position within each paragraph.
+ONLY RETURN THE BLOCK STRUCTURE, NO OTHER TEXT.
 """
 
         # Add feedback history if exists
@@ -822,11 +934,14 @@ def generate_complex_block(
 
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = f"""
+
+Context: {context if context else "General use"}
+
 Add relevant complex block identifiers to this building block structure:
 
 {block_output}
 
-Context: {context if context else "General use"}
+ONLY RETURN THE COMPLEX BLOCK STRUCTURE, NO OTHER TEXT.
 """
 
         if feedback_history:
@@ -893,22 +1008,27 @@ def populate_block(
     # Load instruction template
     instructions = load_text_file("./instructions/block_population.md")
     
-    system_prompt = f"{instructions}\n\nRequired text to include: {system_prompt_must}\n\nBLOCK DEFINITIONS:\n{block_definitions}\n\nCOMPLEX BLOCK DEFINITIONS:\n{complex_definitions}"
+
+    if system_prompt_must:
+        system_prompt = f"{instructions}\n\nRequired text to include: {system_prompt_must}"
+    else:
+        system_prompt = f"{instructions}"
     
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = f"""
 Convert this structured block format into a natural English system prompt:
 
-STRUCTURED INPUT:
-{complex_block}
-
 CONTEXT:
 {context}
 
-REQUIRED TEXT (must include word-for-word):
-{system_prompt_must}
+REQUIRED TEXT (must include word-for-word): could be empty if not provided
+"{system_prompt_must}"
 
-Focus on populate, address as YOU are for the system prompt, and the user is . Dont mention we, us. Should be objective. 
+STRUCTURED INPUT:
+{complex_block}
+
+ONLY RETURN THE SYSTEM PROMPT, NO OTHER TEXT.
+
 """
         
         if feedback_history:
@@ -964,16 +1084,19 @@ def add_system_info(
 
     def generate_content(iteration: int, feedback_history: List[str]) -> str:
         user_message = f"""
-COMPLEX STRUCTURE:
-{complex_structure}
-
 CONTEXT:
 {context}
 
 SYSTEM SETTINGS:
 {system_settings}
 
-return the system prompt in the same format as the complex structure with the system info added to the first CONTEXT_INFORMATION block
+COMPLEX STRUCTURE:
+{complex_structure}
+
+return the system prompt in the same format as the complex structure with the system info added to the first CONTEXT_INFORMATION block.
+
+ONLY RETURN THE SYSTEM PROMPT, NO OTHER TEXT.
+
 """
 
         if feedback_history:
