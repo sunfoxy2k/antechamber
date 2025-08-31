@@ -181,78 +181,70 @@ def play_notification_sound() -> None:
         print("=" * 40)
 
 
-class FeedbackWidget:
-    """Simple feedback widget with proper event handling."""
-    
-    def __init__(self, task_name: str):
-        import ipywidgets as widgets
-        from IPython.display import display
-        
-        self.result = None
-        self.task_name = task_name
-        
-        # Create interface
-        self.feedback_area = widgets.Textarea(
-            placeholder=f"Enter feedback for {task_name.lower()} (optional)",
-            layout=widgets.Layout(width="100%", height="100px")
-        )
-        
-        self.submit_btn = widgets.Button(description="Submit Feedback", button_style='primary')
-        self.good_btn = widgets.Button(description="Looks Good!", button_style='success') 
-        self.stop_btn = widgets.Button(description="Stop Here", button_style='warning')
-        
-        self.status = widgets.HTML("Click a button to proceed...")
-        self.output = widgets.Output()
-        
-        # Set up event handlers
-        self.submit_btn.on_click(self._on_submit)
-        self.good_btn.on_click(self._on_good)
-        self.stop_btn.on_click(self._on_stop)
-        
-        # Display interface
-        buttons = widgets.HBox([self.submit_btn, self.good_btn, self.stop_btn])
-        interface = widgets.VBox([
-            widgets.HTML(f"<h4>💬 {task_name} Feedback</h4>"),
-            self.status,
-            self.feedback_area, 
-            buttons,
-            self.output
-        ])
-        display(interface)
-    
-    def _disable_all(self):
-        self.submit_btn.disabled = True
-        self.good_btn.disabled = True  
-        self.stop_btn.disabled = True
-    
-    def _on_submit(self, btn):
-        self._disable_all()
-        self.status.value = "✅ Processing feedback..."
-        feedback = self.feedback_area.value.strip()
-        self.result = {'action': 'continue', 'feedback': feedback}
-        with self.output:
-            print(f"✅ Feedback: {feedback}" if feedback else "✅ No feedback provided")
-    
-    def _on_good(self, btn):
-        self._disable_all()
-        self.status.value = "✅ Task completed!"
-        self.result = {'action': 'done', 'feedback': ''}
-        with self.output:
-            print("✅ Task completed successfully!")
-    
-    def _on_stop(self, btn):
-        self._disable_all()
-        self.status.value = "⏹️ Task stopped!"
-        self.result = {'action': 'stop', 'feedback': ''}
-        with self.output:
-            print("⏹️ Task stopped by user")
+# Global variable to store widget results
+_widget_result = None
+
+def _on_submit_click(btn):
+    global _widget_result
+    btn.disabled = True
+    feedback = btn.feedback_area.value.strip() if hasattr(btn, 'feedback_area') else ''
+    _widget_result = {'action': 'continue', 'feedback': feedback}
+    print(f"✅ Feedback submitted: '{feedback}'" if feedback else "✅ No feedback provided")
+
+def _on_good_click(btn):
+    global _widget_result
+    btn.disabled = True
+    _widget_result = {'action': 'done', 'feedback': ''}
+    print("✅ Task completed!")
+
+def _on_stop_click(btn):
+    global _widget_result
+    btn.disabled = True
+    _widget_result = {'action': 'stop', 'feedback': ''}
+    print("⏹️ Task stopped!")
 
 
 def _create_feedback_widget(task_name: str):
     """Create a simple feedback widget."""
     try:
-        widget = FeedbackWidget(task_name)
-        return widget
+        import ipywidgets as widgets
+        from IPython.display import display
+        
+        global _widget_result
+        _widget_result = None  # Reset result
+        
+        # Create components
+        feedback_area = widgets.Textarea(
+            placeholder=f"Enter feedback for {task_name.lower()} (optional)",
+            layout=widgets.Layout(width="100%", height="100px")
+        )
+        
+        submit_btn = widgets.Button(description="Submit Feedback", button_style='primary')
+        good_btn = widgets.Button(description="Looks Good!", button_style='success')
+        stop_btn = widgets.Button(description="Stop Here", button_style='warning')
+        
+        # Attach feedback area to buttons so handlers can access it
+        submit_btn.feedback_area = feedback_area
+        good_btn.feedback_area = feedback_area
+        stop_btn.feedback_area = feedback_area
+        
+        # Set up event handlers
+        submit_btn.on_click(_on_submit_click)
+        good_btn.on_click(_on_good_click)
+        stop_btn.on_click(_on_stop_click)
+        
+        # Display interface
+        buttons = widgets.HBox([submit_btn, good_btn, stop_btn])
+        interface = widgets.VBox([
+            widgets.HTML(f"<h4>💬 {task_name} Feedback</h4>"),
+            widgets.HTML("Click a button to proceed..."),
+            feedback_area,
+            buttons
+        ])
+        display(interface)
+        
+        return True  # Indicate widget was created successfully
+        
     except ImportError:
         return None
 
@@ -329,23 +321,25 @@ def interactive_feedback_loop(
             return response
 
         # Get user feedback using widgets if available, otherwise fallback to input
-        widget = _create_feedback_widget(task_name)
+        widget_created = _create_feedback_widget(task_name)
         
-        if widget is not None:
+        if widget_created:
             print("⏳ Click one of the buttons above to proceed...")
             
-            # Simple polling approach - check every 0.5 seconds
+            # Simple polling approach - check global variable every 0.5 seconds
             import time
+            global _widget_result
+            
             timeout = 300  # 5 minutes
             elapsed = 0
             
-            while widget.result is None and elapsed < timeout:
+            while _widget_result is None and elapsed < timeout:
                 time.sleep(0.5)
                 elapsed += 0.5
             
-            if widget.result is not None:
-                action = widget.result['action']
-                feedback = widget.result['feedback']
+            if _widget_result is not None:
+                action = _widget_result['action']
+                feedback = _widget_result['feedback']
                 
                 if action == 'done':
                     print(f"\n✅ {task_name} completed successfully!")
