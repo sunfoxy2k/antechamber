@@ -181,74 +181,6 @@ def play_notification_sound() -> None:
         print("=" * 40)
 
 
-# Global variable to store widget results
-_widget_result = None
-
-def _on_submit_click(btn):
-    global _widget_result
-    btn.disabled = True
-    feedback = btn.feedback_area.value.strip() if hasattr(btn, 'feedback_area') else ''
-    _widget_result = {'action': 'continue', 'feedback': feedback}
-    print(f"✅ Feedback submitted: '{feedback}'" if feedback else "✅ No feedback provided")
-
-def _on_good_click(btn):
-    global _widget_result
-    btn.disabled = True
-    _widget_result = {'action': 'done', 'feedback': ''}
-    print("✅ Task completed!")
-
-def _on_stop_click(btn):
-    global _widget_result
-    btn.disabled = True
-    _widget_result = {'action': 'stop', 'feedback': ''}
-    print("⏹️ Task stopped!")
-
-
-def _create_feedback_widget(task_name: str):
-    """Create a simple feedback widget."""
-    try:
-        import ipywidgets as widgets
-        from IPython.display import display
-        
-        global _widget_result
-        _widget_result = None  # Reset result
-        
-        # Create components
-        feedback_area = widgets.Textarea(
-            placeholder=f"Enter feedback for {task_name.lower()} (optional)",
-            layout=widgets.Layout(width="100%", height="100px")
-        )
-        
-        submit_btn = widgets.Button(description="Submit Feedback", button_style='primary')
-        good_btn = widgets.Button(description="Looks Good!", button_style='success')
-        stop_btn = widgets.Button(description="Stop Here", button_style='warning')
-        
-        # Attach feedback area to buttons so handlers can access it
-        submit_btn.feedback_area = feedback_area
-        good_btn.feedback_area = feedback_area
-        stop_btn.feedback_area = feedback_area
-        
-        # Set up event handlers
-        submit_btn.on_click(_on_submit_click)
-        good_btn.on_click(_on_good_click)
-        stop_btn.on_click(_on_stop_click)
-        
-        # Display interface
-        buttons = widgets.HBox([submit_btn, good_btn, stop_btn])
-        interface = widgets.VBox([
-            widgets.HTML(f"<h4>💬 {task_name} Feedback</h4>"),
-            widgets.HTML("Click a button to proceed..."),
-            feedback_area,
-            buttons
-        ])
-        display(interface)
-        
-        return True  # Indicate widget was created successfully
-        
-    except ImportError:
-        return None
-
-
 def interactive_feedback_loop(
     generator_func: Callable,
     validator_func: Optional[Callable] = None,
@@ -320,65 +252,29 @@ def interactive_feedback_loop(
             print(f"\n{task_name} completed (non-interactive mode).")
             return response
 
-        # Get user feedback using widgets if available, otherwise fallback to input
-        widget_created = _create_feedback_widget(task_name)
-        
-        if widget_created:
-            print("⏳ Click one of the buttons above to proceed...")
-            
-            # Simple polling approach - check global variable every 0.5 seconds
-            import time
-            global _widget_result
-            
-            timeout = 300  # 5 minutes
-            elapsed = 0
-            
-            while _widget_result is None and elapsed < timeout:
-                time.sleep(0.5)
-                elapsed += 0.5
-            
-            if _widget_result is not None:
-                action = _widget_result['action']
-                feedback = _widget_result['feedback']
-                
-                if action == 'done':
-                    print(f"\n✅ {task_name} completed successfully!")
-                    return response
-                elif action == 'stop':
-                    print(f"\n⏹️ {task_name} stopped.")
-                    return response
-                elif action == 'continue':
-                    if feedback:
-                        feedback_history.append(f"Iteration {iteration}: {feedback}")
-                        print(f"🔄 Continuing with feedback...")
-                    else:
-                        print(f"✅ Continuing without feedback...")
-            else:
-                print("⚠️ Timeout - falling back to text input")
-        else:
-            # Fallback to regular input
-            feedback = input(
-                f"\nProvide feedback for {task_name.lower()} "
-                "(or type 'good' to finish, 'stop' to end): "
-            ).strip()
+        # Get user feedback (only in interactive mode)
+        feedback = input(
+            f"\nProvide feedback for {task_name.lower()} "
+            "(or type 'good' to finish, 'stop' to end): "
+        ).strip()
 
-            if feedback == "":
-                print(f"No feedback provided. {task_name} complete.")
-                return response
+        if feedback == "":
+            print(f"No feedback provided. {task_name} complete.")
+            return response
 
-            if feedback.lower() in ['done', 'good', 'good!', 'looks good',
-                                    'perfect']:
-                print(f"\nGreat! {task_name} completed successfully.")
-                return response
+        if feedback.lower() in ['done', 'good', 'good!', 'looks good',
+                                'perfect']:
+            print(f"\nGreat! {task_name} completed successfully.")
+            return response
 
-            if feedback.lower() in ['stop', 'quit', 'exit']:
-                print(f"\nStopping {task_name.lower()}.")
-                return response
+        if feedback.lower() in ['stop', 'quit', 'exit']:
+            print(f"\nStopping {task_name.lower()}.")
+            return response
 
-            if feedback:
-                feedback_history.append(f"Iteration {iteration}: {feedback}")
-                print(f"Feedback recorded: {feedback}")
-                print(f"Generating new {task_name.lower()} based on feedback...")
+        if feedback:
+            feedback_history.append(f"Iteration {iteration}: {feedback}")
+            print(f"Feedback recorded: {feedback}")
+            print(f"Generating new {task_name.lower()} based on feedback...")
 
         iteration += 1
 
@@ -1109,6 +1005,74 @@ ONLY RETURN THE SYSTEM PROMPT, NO OTHER TEXT.
         generate_content,
         max_iterations=3,
         task_name="Adding System Info to First Context Information Block",
+        interactive=interactive
+    )
+
+
+# ==================== FORMALIZATION FUNCTIONS ====================
+
+
+def formalize_system_prompt(
+    system_prompt: str, interactive: bool = False
+) -> str:
+    """
+    Convert system prompt to more direct, natural English with proper sentence subjects.
+    Preserves all text inside quotation marks unchanged.
+    
+    Args:
+        system_prompt: The system prompt to formalize
+        interactive: If True, ask for user feedback. If False (default), 
+                    run once and return result
+    
+    Returns:
+        String: Formalized system prompt with natural English
+    """
+    
+    # Load instruction template for formalization
+    instructions = """You are a professional editor that converts system prompts into direct, natural English.
+
+## Your Task
+Transform the provided system prompt to use:
+- Direct language with clear subjects in every sentence
+- Natural English flow and structure
+- Proper sentence construction with explicit subjects
+- Professional but conversational tone
+
+## Critical Rules
+1. **NEVER change any text inside quotation marks** - preserve quoted content exactly as written
+2. **Add clear subjects** to sentences that lack them (avoid starting with verbs)
+3. **Use direct language** - replace passive voice with active voice where possible
+4. **Maintain all original meaning** - only change language structure, not content
+5. **Keep the same format structure** - preserve paragraphs, bullet points, etc.
+
+## What NOT to Change
+- Any text inside "quotation marks" - keep these exactly as written
+- Technical terms, tool names, or specific instructions
+- The overall structure and organization
+- The core meaning or intent of any instruction"""
+
+    def generate_content(iteration: int, feedback_history: List[str]) -> str:
+        user_message = f"""Please formalize this system prompt using direct, natural English with proper sentence subjects:
+
+{system_prompt}
+
+Remember: Do NOT change any text inside quotation marks. Only improve the language structure and directness."""
+
+        if feedback_history:
+            user_message += ("\n\nPrevious feedback to incorporate:\n" +
+                             "\n".join(feedback_history))
+
+        messages = [
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": user_message.strip()}
+        ]
+
+        return DEFAULT_MODEL.generate(messages)
+
+    return interactive_feedback_loop(
+        generate_content,
+        max_iterations=3,
+        task_name="Formalizing System Prompt",
         interactive=interactive
     )
 

@@ -4,7 +4,7 @@
 You are a system prompt generator that creates structured prompts using building block format.
 
 ## Task
-Create 6 to 8 paragraphs using building block format.
+Create 6 paragraphs using building block format.
 
 ## Format Structure
 Each paragraph should follow patterns like:

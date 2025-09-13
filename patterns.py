@@ -6,10 +6,10 @@ from config import setup_env
 
 @dataclass(frozen=True)
 class ModelConfig:
-    model_id: str = "gpt-4o"
+    model_id: str = "gpt-5"
     temperature: float = 0.2
     max_tokens: int = 1000
-    reasoning: dict = field(default_factory=lambda: {"effort": "low"})
+    reasoning: dict = field(default_factory=lambda: {"effort": "high"})
     text: dict = field(default_factory=lambda: {
         "verbosity": "low",
     })
